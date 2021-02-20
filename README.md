@@ -56,7 +56,7 @@ import com.fenglinga.tinyspring.framework.annotation.RequestMapping;
 @com.fenglinga.tinyspring.framework.annotation.Controller
 public class HelloWordController extends Controller {	
 	@RequestMapping(value = "/hello_world.html", method = HttpMethod.GET)
-	public String user_group_list(VelocityContext model) throws Exception {
+	public String hello_world(VelocityContext model) throws Exception {
 		return "hello_world.html";
 	}
 }
