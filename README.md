@@ -42,3 +42,47 @@ database.auto_timestamp=false
 database.sql_explain=false
 database.show-sql=true
 ```
+
+定义Controller：
+```java
+package controller;
+
+import org.apache.mina.http.api.HttpMethod;
+import org.apache.velocity.VelocityContext;
+
+import com.fenglinga.tinyspring.framework.Controller;
+import com.fenglinga.tinyspring.framework.annotation.RequestMapping;
+
+@com.fenglinga.tinyspring.framework.annotation.Controller
+public class HelloWordController extends Controller {	
+	@RequestMapping(value = "/hello_world.html", method = HttpMethod.GET)
+	public String user_group_list(VelocityContext model) throws Exception {
+		return "hello_world.html";
+	}
+}
+```
+
+定义RestController：
+```java
+package controller;
+
+import org.apache.mina.http.api.HttpMethod;
+import org.apache.mina.http.api.HttpRequest;
+
+import com.alibaba.fastjson.JSONObject;
+import com.fenglinga.tinyspring.framework.Controller;
+import com.fenglinga.tinyspring.framework.annotation.Comment;
+import com.fenglinga.tinyspring.framework.annotation.RequestMapping;
+import com.fenglinga.tinyspring.framework.annotation.RestController;
+
+@RestController
+public class HelloWordRestController extends Controller {
+	@Comment(content="Hello World")
+	@RequestMapping(value = "/hello_world", method = {HttpMethod.GET, HttpMethod.POST})
+	public JSONObject hello_world(
+			HttpRequest request
+	) throws Exception {
+		return new JSONObject();
+	}
+}
+```
