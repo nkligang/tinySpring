@@ -89,5 +89,10 @@ public class HelloWordRestController extends Controller {
 
 数据库访问：
 ```java
-Db.name("users").alias("u").join("tp_user_account ua", "u.user_id = ua.member_id").field("user_id as id,tuijian_id as recommend_id,mobile").where("mobile", "12345678901").find();
+Db.name("users")
+	.alias("u")
+	.join("tp_user_account ua", "u.user_id = ua.member_id")
+	.field("user_id as id,tuijian_id as recommend_id,mobile")
+	.where("mobile", "12345678901")
+	.find();
 ```
