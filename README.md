@@ -91,8 +91,8 @@ public class HelloWordRestController extends Controller {
 ```java
 Db.name("users")
 	.alias("u")
-	.join("tp_user_account ua", "u.user_id = ua.member_id")
-	.field("user_id as id,tuijian_id as recommend_id,mobile")
+	.join("tp_user_account ua", "u.id = ua.member_id")
+	.field("id,recommend_id,mobile")
 	.where("mobile", "12345678901")
 	.find();
 ```
