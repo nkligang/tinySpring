@@ -46,36 +46,36 @@
         <artifactId>slf4j-log4j12</artifactId>
         <version>1.7.29</version>
     </dependency>
-	<dependency>
-	    <groupId>log4j</groupId>
-	    <artifactId>log4j</artifactId>
-	    <version>1.2.17</version>
-	</dependency>
-	<dependency>
-	    <groupId>com.alibaba</groupId>
-	    <artifactId>fastjson</artifactId>
-	    <version>1.2.62</version>
-	</dependency>
-	<dependency>
-	    <groupId>org.apache.velocity</groupId>
-	    <artifactId>velocity</artifactId>
-	    <version>1.7</version>
-	</dependency>
-	<dependency>
-	    <groupId>mysql</groupId>
-	    <artifactId>mysql-connector-java</artifactId>
-	    <version>5.0.8</version>
-	</dependency>
-	<dependency>
-	    <groupId>org.apache.mina</groupId>
-	    <artifactId>mina-core</artifactId>
-	    <version>2.1.4</version>
-	</dependency>
-	<dependency>
-	    <groupId>org.apache.mina</groupId>
-	    <artifactId>mina-http</artifactId>
-	    <version>2.1.4</version>
-	</dependency>
+    <dependency>
+        <groupId>log4j</groupId>
+        <artifactId>log4j</artifactId>
+        <version>1.2.17</version>
+    </dependency>
+    <dependency>
+        <groupId>com.alibaba</groupId>
+        <artifactId>fastjson</artifactId>
+        <version>1.2.62</version>
+    </dependency>
+    <dependency>
+        <groupId>org.apache.velocity</groupId>
+        <artifactId>velocity</artifactId>
+        <version>1.7</version>
+    </dependency>
+    <dependency>
+        <groupId>mysql</groupId>
+        <artifactId>mysql-connector-java</artifactId>
+        <version>5.0.8</version>
+    </dependency>
+    <dependency>
+        <groupId>org.apache.mina</groupId>
+        <artifactId>mina-core</artifactId>
+        <version>2.1.4</version>
+    </dependency>
+    <dependency>
+        <groupId>org.apache.mina</groupId>
+        <artifactId>mina-http</artifactId>
+        <version>2.1.4</version>
+    </dependency>
   </dependencies>
     <distributionManagement>
         <snapshotRepository>
@@ -88,13 +88,13 @@
             <url>http://oss.sonatype.org/service/local/staging/deploy/maven2/</url>
         </repository>
     </distributionManagement>
-	<build>
-		<plugins>
-			<plugin>
-	    		<groupId>org.apache.felix</groupId>
-	   			<artifactId>maven-bundle-plugin</artifactId>
-	   			<extensions>true</extensions>
-			</plugin>
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.felix</groupId>
+                <artifactId>maven-bundle-plugin</artifactId>
+                <extensions>true</extensions>
+            </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-jar-plugin</artifactId>
@@ -107,15 +107,15 @@
                     </execution>
                 </executions>
             </plugin>
-	        <plugin>
-	            <groupId>org.apache.maven.plugins</groupId>
-	            <artifactId>maven-compiler-plugin</artifactId>
-	            <configuration>
-	                <source>1.6</source> 
-	                <target>1.6</target> 
-	                <encoding>UTF-8</encoding>
-	            </configuration>
-	        </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <source>1.6</source> 
+                    <target>1.6</target> 
+                    <encoding>UTF-8</encoding>
+                </configuration>
+            </plugin>
              <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-source-plugin</artifactId>
@@ -134,10 +134,10 @@
                 <artifactId>maven-javadoc-plugin</artifactId>
                 <version>2.9.1</version>
                 <configuration>
-                	<aggregate>true</aggregate>
-                	<charset>UTF-8</charset>
-                	<encoding>UTF-8</encoding>
-                	<docencoding>UTF-8</docencoding>
+                    <aggregate>true</aggregate>
+                    <charset>UTF-8</charset>
+                    <encoding>UTF-8</encoding>
+                    <docencoding>UTF-8</docencoding>
                 </configuration>
                 <executions>
                     <execution>
@@ -146,7 +146,7 @@
                             <goal>jar</goal>
                         </goals>
                         <configuration>
-                        	<additionalparam>-Xdoclint:none</additionalparam>
+                            <additionalparam>-Xdoclint:none</additionalparam>
                             <additionalOption>
                                 <additionalOption>-Xdoclint:none</additionalOption>
                             </additionalOption>
@@ -179,6 +179,6 @@
                     <autoReleaseAfterClose>true</autoReleaseAfterClose>
                 </configuration>
             </plugin>
-		</plugins>
-	</build>
+        </plugins>
+    </build>
 </project>

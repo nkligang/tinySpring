@@ -12,12 +12,12 @@ import org.apache.mina.core.buffer.IoBuffer;
  * @author DHRUV CHOPRA
  */
 public class WebSocketCodecPacket {
-	public static final int PACKET_TYPE_TEXT = 1;
-	public static final int PACKET_TYPE_BINARY = 2;
-	public static final int PACKET_TYPE_PING = 9;
-	
-	private int type = PACKET_TYPE_BINARY;
-	private boolean mask = false;
+    public static final int PACKET_TYPE_TEXT = 1;
+    public static final int PACKET_TYPE_BINARY = 2;
+    public static final int PACKET_TYPE_PING = 9;
+    
+    private int type = PACKET_TYPE_BINARY;
+    private boolean mask = false;
     private IoBuffer packet;
     
     /*
@@ -57,8 +57,8 @@ public class WebSocketCodecPacket {
     }
     
     private WebSocketCodecPacket(String text){
-		packet = IoBuffer.wrap(text.getBytes());
-		type = PACKET_TYPE_TEXT;
+        packet = IoBuffer.wrap(text.getBytes());
+        type = PACKET_TYPE_TEXT;
     }
     
     public IoBuffer getPacket(){
@@ -66,18 +66,18 @@ public class WebSocketCodecPacket {
     }
     
     public String getString() {
-    	return new String(packet.array(), packet.position(), packet.remaining());
+        return new String(packet.array(), packet.position(), packet.remaining());
     }
     
     public int getPacketType(){
-    	return type;
+        return type;
     }
     
     public boolean isPacketText(){
-    	return type == PACKET_TYPE_TEXT;
+        return type == PACKET_TYPE_TEXT;
     }
     
     public boolean hasMask() {
-    	return mask;
+        return mask;
     }
 }

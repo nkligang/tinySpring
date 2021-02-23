@@ -21,15 +21,15 @@ import org.apache.mina.http.api.DefaultHttpResponse;
  * @author DHRUV CHOPRA
  */
 public class WebSocketDecoder extends CumulativeProtocolDecoder {
-	private boolean mIsServer = true;
-	
-	public WebSocketDecoder() {
-		mIsServer = true;
-	}
-	
-	public WebSocketDecoder(boolean isServer) {
-		mIsServer = isServer;
-	}
+    private boolean mIsServer = true;
+    
+    public WebSocketDecoder() {
+        mIsServer = true;
+    }
+    
+    public WebSocketDecoder(boolean isServer) {
+        mIsServer = isServer;
+    }
     
     @Override
     protected boolean doDecode(IoSession session, IoBuffer in, ProtocolDecoderOutput out) throws Exception {        
@@ -43,10 +43,10 @@ public class WebSocketDecoder extends CumulativeProtocolDecoder {
                 in.position(in.limit());
                 
                 if (session.containsAttribute(WebSocketUtils.SessionHttpRequestRunnable)) {
-                	Runnable command = (Runnable)session.getAttribute(WebSocketUtils.SessionHttpRequestRunnable);
-                	if (command != null) {
-                		command.run();
-                	}
+                    Runnable command = (Runnable)session.getAttribute(WebSocketUtils.SessionHttpRequestRunnable);
+                    if (command != null) {
+                        command.run();
+                    }
                 }
                 return true;
             } else if(!mIsServer && tryWebSockeHandShakeResponse(session, in, out)) {
@@ -55,10 +55,10 @@ public class WebSocketDecoder extends CumulativeProtocolDecoder {
                 in.position(in.limit());
                 
                 if (session.containsAttribute(WebSocketUtils.SessionHttpResponseRunnable)) {
-                	Runnable command = (Runnable)session.getAttribute(WebSocketUtils.SessionHttpResponseRunnable);
-                	if (command != null) {
-                		command.run();
-                	}
+                    Runnable command = (Runnable)session.getAttribute(WebSocketUtils.SessionHttpResponseRunnable);
+                    if (command != null) {
+                        command.run();
+                    }
                 }
                 return true;
             }
@@ -80,7 +80,7 @@ public class WebSocketDecoder extends CumulativeProtocolDecoder {
                 return false;
             }
             if (packet.getPacket().remaining() > 0) {
-            	out.write(packet);
+                out.write(packet);
             }
             return true;
         }
@@ -101,12 +101,12 @@ public class WebSocketDecoder extends CumulativeProtocolDecoder {
     private boolean tryWebSockeHandShake(IoSession session, IoBuffer in, ProtocolDecoderOutput out) {
         
         try{
-        	HttpRequestImpl request = WebSocketUtils.parseHttpRequestHead(in);
-        	String socketKey = request.getHeader("sec-websocket-key");
+            HttpRequestImpl request = WebSocketUtils.parseHttpRequestHead(in);
+            String socketKey = request.getHeader("sec-websocket-key");
             if(socketKey.length() <= 0){
                 return false;
             }
-        	session.setAttribute(WebSocketUtils.SessionHttpRequest, request);
+            session.setAttribute(WebSocketUtils.SessionHttpRequest, request);
             String challengeAccept = WebSocketUtils.getWebSocketKeyChallengeResponse(socketKey);            
             WebSocketHandShakeResponse wsResponse = WebSocketUtils.buildWSHandshakeResponse(challengeAccept);
             session.setAttribute(WebSocketUtils.SessionAttribute, true);
@@ -122,12 +122,12 @@ public class WebSocketDecoder extends CumulativeProtocolDecoder {
     private boolean tryWebSockeHandShakeResponse(IoSession session, IoBuffer in, ProtocolDecoderOutput out) {
         
         try{
-        	DefaultHttpResponse response = WebSocketUtils.parseHttpReponseHead(in);
-        	String socketKey = response.getHeader("sec-websocket-accept");
+            DefaultHttpResponse response = WebSocketUtils.parseHttpReponseHead(in);
+            String socketKey = response.getHeader("sec-websocket-accept");
             if(socketKey.length() <= 0){
                 return false;
             }
-        	session.setAttribute(WebSocketUtils.SessionHttpResponse, response);
+            session.setAttribute(WebSocketUtils.SessionHttpResponse, response);
             session.setAttribute(WebSocketUtils.SessionAttribute, true);
             return true;
         }
@@ -142,8 +142,8 @@ public class WebSocketDecoder extends CumulativeProtocolDecoder {
     // all and return one complete decoded buffer.
     private static WebSocketCodecPacket buildWSDataBuffer(IoBuffer in, IoSession session) {
 
-    	boolean bBinary = true;
-    	WebSocketCodecPacket packet = null;
+        boolean bBinary = true;
+        WebSocketCodecPacket packet = null;
         IoBuffer resultBuffer = null;
         do{
             byte frameInfo = in.get();            
@@ -154,7 +154,7 @@ public class WebSocketDecoder extends CumulativeProtocolDecoder {
                 session.close(true);
                 return packet;
             } else if (opCode == 1) {
-            	bBinary = false;
+                bBinary = false;
             }
             
             byte secByte = in.get();
@@ -170,62 +170,62 @@ public class WebSocketDecoder extends CumulativeProtocolDecoder {
             
             boolean hasMask = (secByte & 0x80) > 0;
             if (hasMask) {
-	            // Validate if we have enough data in the buffer to completely
-	            // parse the WebSocket DataFrame. If not return null.
-	            if(dataLength+4 > in.remaining()){
-	                return null;
-	            }
-	            
-	            byte mask[] = new byte[4];
-	            for (int i = 0; i < 4; i++) {
-	                mask[i] = in.get();
-	            }
-	
-	            /*  now un-mask frameLen bytes as per Section 5.3 RFC 6455
-	                Octet i of the transformed data ("transformed-octet-i") is the XOR of
-	                octet i of the original data ("original-octet-i") with octet at index
-	                i modulo 4 of the masking key ("masking-key-octet-j"):
-	
-	                j                   = i MOD 4
-	                transformed-octet-i = original-octet-i XOR masking-key-octet-j
-	            * 
-	            */
-	            
-	            byte[] unMaskedPayLoad = new byte[dataLength];
-	            for (int i = 0; i < dataLength; i++) {
-	                byte maskedByte = in.get();
-	                unMaskedPayLoad[i] = (byte) (maskedByte ^ mask[i % 4]);
-	            }
-	            
-	            if(resultBuffer == null){
-	                resultBuffer = IoBuffer.wrap(unMaskedPayLoad);
-	                resultBuffer.position(resultBuffer.limit());
-	                resultBuffer.setAutoExpand(true);
-	            }
-	            else{
-	                resultBuffer.put(unMaskedPayLoad);
-	            }
+                // Validate if we have enough data in the buffer to completely
+                // parse the WebSocket DataFrame. If not return null.
+                if(dataLength+4 > in.remaining()){
+                    return null;
+                }
+                
+                byte mask[] = new byte[4];
+                for (int i = 0; i < 4; i++) {
+                    mask[i] = in.get();
+                }
+    
+                /*  now un-mask frameLen bytes as per Section 5.3 RFC 6455
+                    Octet i of the transformed data ("transformed-octet-i") is the XOR of
+                    octet i of the original data ("original-octet-i") with octet at index
+                    i modulo 4 of the masking key ("masking-key-octet-j"):
+    
+                    j                   = i MOD 4
+                    transformed-octet-i = original-octet-i XOR masking-key-octet-j
+                * 
+                */
+                
+                byte[] unMaskedPayLoad = new byte[dataLength];
+                for (int i = 0; i < dataLength; i++) {
+                    byte maskedByte = in.get();
+                    unMaskedPayLoad[i] = (byte) (maskedByte ^ mask[i % 4]);
+                }
+                
+                if(resultBuffer == null){
+                    resultBuffer = IoBuffer.wrap(unMaskedPayLoad);
+                    resultBuffer.position(resultBuffer.limit());
+                    resultBuffer.setAutoExpand(true);
+                }
+                else{
+                    resultBuffer.put(unMaskedPayLoad);
+                }
             } else {
-	            // Validate if we have enough data in the buffer to completely
-	            // parse the WebSocket DataFrame. If not return null.
-	            if(dataLength > in.remaining()){
-	                return null;
-	            }
-            	
-	            if(resultBuffer == null){
-	                resultBuffer = IoBuffer.allocate(dataLength);
-	                resultBuffer.setAutoExpand(true);
-	                resultBuffer.put(in.array(), in.position(), dataLength);
-	                in.position(in.position() + dataLength);
-	            }
-	            else{
-	                resultBuffer.put(in.array(), in.position(), dataLength);
-	                in.position(in.position() + dataLength);
-	            }
+                // Validate if we have enough data in the buffer to completely
+                // parse the WebSocket DataFrame. If not return null.
+                if(dataLength > in.remaining()){
+                    return null;
+                }
+                
+                if(resultBuffer == null){
+                    resultBuffer = IoBuffer.allocate(dataLength);
+                    resultBuffer.setAutoExpand(true);
+                    resultBuffer.put(in.array(), in.position(), dataLength);
+                    in.position(in.position() + dataLength);
+                }
+                else{
+                    resultBuffer.put(in.array(), in.position(), dataLength);
+                    in.position(in.position() + dataLength);
+                }
             }
             
             if (opCode == 0xA) {
-            	WebSocketCodecPacket result = WebSocketCodecPacket.buildPacketBinary(resultBuffer, opCode);
+                WebSocketCodecPacket result = WebSocketCodecPacket.buildPacketBinary(resultBuffer, opCode);
                 session.write(result);
             }
         }
@@ -233,9 +233,9 @@ public class WebSocketDecoder extends CumulativeProtocolDecoder {
         
         resultBuffer.flip();
         if (bBinary) {
-        	packet = WebSocketCodecPacket.buildPacket(resultBuffer);
+            packet = WebSocketCodecPacket.buildPacket(resultBuffer);
         } else {
-        	packet = WebSocketCodecPacket.buildPacketText(resultBuffer);
+            packet = WebSocketCodecPacket.buildPacketText(resultBuffer);
         }
         return packet;
 

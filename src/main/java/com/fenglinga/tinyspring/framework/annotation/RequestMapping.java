@@ -13,10 +13,10 @@ import org.apache.mina.http.api.HttpMethod;
 @Documented
 @Mapping
 public @interface RequestMapping {
-	String name() default "";
+    String name() default "";
 
-	@AliasFor("path")
-	String[] value() default {};
-	
-	HttpMethod[] method() default {};
+    @AliasFor("path")
+    String[] value() default {};
+    
+    HttpMethod[] method() default {};
 }

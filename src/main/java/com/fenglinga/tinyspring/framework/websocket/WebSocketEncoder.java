@@ -58,7 +58,7 @@ public class WebSocketEncoder extends ProtocolEncoderAdapter{
         int dataLength = buf.limit();
         IoBuffer buffer = IoBuffer.allocate(dataLength + 9, false);
         buffer.setAutoExpand(true);
-    	buffer.put((byte) (0x80 | (0x0F & type)));
+        buffer.put((byte) (0x80 | (0x0F & type)));
         if(dataLength <= 125){
             byte capacity = (byte)(dataLength);
             buffer.put(hasMask ? (byte)(126|0x80) : capacity);
@@ -73,17 +73,17 @@ public class WebSocketEncoder extends ProtocolEncoderAdapter{
             }
         }
         if (hasMask) {
-	        byte[] mask = new byte[4];
-	        for (int i = 0; i < 4; i++) {
-	        	mask[i] = (byte)Utils.getRandomValue();
-	        	buffer.put(mask[i]);
-	        }
-	        for (int i = 0; i < dataLength; i++) {
-	            byte maskedByte = buf.get();
-	            buffer.put((byte) (maskedByte ^ mask[i % 4]));
-	        }
+            byte[] mask = new byte[4];
+            for (int i = 0; i < 4; i++) {
+                mask[i] = (byte)Utils.getRandomValue();
+                buffer.put(mask[i]);
+            }
+            for (int i = 0; i < dataLength; i++) {
+                byte maskedByte = buf.get();
+                buffer.put((byte) (maskedByte ^ mask[i % 4]));
+            }
         } else {
-        	buffer.put(buf);
+            buffer.put(buf);
         }
         buffer.flip();
         return buffer;

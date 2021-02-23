@@ -426,7 +426,7 @@ public class Base64
         } else {
             return _STANDARD_ALPHABET;
         }
-    }	// end getAlphabet
+    }    // end getAlphabet
 
 
     /**
@@ -444,7 +444,7 @@ public class Base64
         } else {
             return _STANDARD_DECODABET;
         }
-    }	// end getAlphabet
+    }    // end getAlphabet
 
 
 
@@ -490,8 +490,8 @@ public class Base64
      * the <var>destination</var> array.
      * The actual number of significant bytes in your array is
      * given by <var>numSigBytes</var>.</p>
-	 * <p>This is the lowest level of the encoding methods with
-	 * all possible parameters.</p>
+     * <p>This is the lowest level of the encoding methods with
+     * all possible parameters.</p>
      *
      * @param source the array to convert
      * @param srcOffset the index where conversion begins
@@ -505,7 +505,7 @@ public class Base64
     byte[] source, int srcOffset, int numSigBytes,
     byte[] destination, int destOffset, int options ) {
 
-	byte[] ALPHABET = getAlphabet( options );
+    byte[] ALPHABET = getAlphabet( options );
 
         //           1         2         3
         // 01234567890123456789012345678901 Bit position
@@ -1021,15 +1021,15 @@ public class Base64
      * the <var>destination</var> array.
      * This method returns the actual number of bytes that
      * were converted from the Base64 encoding.
-	 * <p>This is the lowest level of the decoding methods with
-	 * all possible parameters.</p>
+     * <p>This is the lowest level of the decoding methods with
+     * all possible parameters.</p>
      *
      *
      * @param source the array to convert
      * @param srcOffset the index where conversion begins
      * @param destination the array to hold the conversion
      * @param destOffset the index where output will be put
-	 * @param options alphabet type is pulled from this (standard, url-safe, ordered)
+     * @param options alphabet type is pulled from this (standard, url-safe, ordered)
      * @return the number of decoded bytes converted
      * @throws NullPointerException if source or destination arrays are null
      * @throws IllegalArgumentException if srcOffset or destOffset are invalid
@@ -1259,7 +1259,7 @@ public class Base64
         catch( java.io.UnsupportedEncodingException uee ) {
             bytes = s.getBytes();
         }   // end catch
-		//</change>
+        //</change>
 
         // Decode
         bytes = decode( bytes, 0, bytes.length, options );

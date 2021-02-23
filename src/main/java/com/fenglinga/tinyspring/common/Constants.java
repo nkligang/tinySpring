@@ -16,29 +16,29 @@ public class Constants
     
     public static void Init() 
     {
-    	String userDir = System.getProperty("user.dir");
-    	System.out.println("User dir: " + userDir);
-    	AppAssetsPath = userDir + "/assets/";
-    	System.out.println("Application assets path: " + AppAssetsPath);
-    	String propertiesString = Utils.LoadStringFromFile(AppAssetsPath + "application.properties");
-    	String [] properties = propertiesString.split("\r\n");
-    	for (String property : properties) {
-    		int idx = property.indexOf('=');
-    		if (idx > 0) {
-    			Config.put(property.substring(0, idx), property.substring(idx + 1, property.length()));
-    		} else {
-    			System.out.println("invalid application.properties:" + property);
-    		}
-    	}
+        String userDir = System.getProperty("user.dir");
+        System.out.println("User dir: " + userDir);
+        AppAssetsPath = userDir + "/assets/";
+        System.out.println("Application assets path: " + AppAssetsPath);
+        String propertiesString = Utils.LoadStringFromFile(AppAssetsPath + "application.properties");
+        String [] properties = propertiesString.split("\r\n");
+        for (String property : properties) {
+            int idx = property.indexOf('=');
+            if (idx > 0) {
+                Config.put(property.substring(0, idx), property.substring(idx + 1, property.length()));
+            } else {
+                System.out.println("invalid application.properties:" + property);
+            }
+        }
     }
     
     public static JSONObject getConfig(String group) {
-    	JSONObject result = new JSONObject();
-    	for (String key : Config.keySet()) {
-    		if (key.startsWith(group + '.')) {
-    			result.put(key.substring(group.length() + 1), Config.get(key));
-    		}
-    	}
-    	return result;
+        JSONObject result = new JSONObject();
+        for (String key : Config.keySet()) {
+            if (key.startsWith(group + '.')) {
+                result.put(key.substring(group.length() + 1), Config.get(key));
+            }
+        }
+        return result;
     }
 }

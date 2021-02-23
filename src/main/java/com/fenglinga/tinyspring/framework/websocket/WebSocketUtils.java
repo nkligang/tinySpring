@@ -31,7 +31,7 @@ import org.slf4j.LoggerFactory;
  */
 public class WebSocketUtils {
     
-	public static final String SessionAttribute = "isWEB";
+    public static final String SessionAttribute = "isWEB";
     public static final String SessionHttpRequest = "httpRequest";
     public static final String SessionHttpResponse = "httpResponse";
     public static final String SessionHttpRequestRunnable = "httpRequestRunnable";
@@ -107,7 +107,7 @@ public class WebSocketUtils {
     public static final Pattern RESPONSE_LINE_PATTERN = Pattern.compile(" ");
 
     public static HttpRequestImpl parseHttpRequestHead(final IoBuffer buffer) {
-    	// Java 6 >> String raw = new String(buffer.array(), 0, buffer.limit(), Charset.forName("UTF-8"));
+        // Java 6 >> String raw = new String(buffer.array(), 0, buffer.limit(), Charset.forName("UTF-8"));
         final String raw = new String(buffer.array(), 0, buffer.limit(), Charset.forName("UTF-8"));
         LOG.info("[Request Headers]\r\n" + raw.trim());
         final String[] headersAndBody = RAW_VALUE_PATTERN.split(raw, -1);
@@ -138,15 +138,15 @@ public class WebSocketUtils {
         // we put the buffer position where we found the beginning of the HTTP body
         int iHeaderAndBodyLen = headersAndBody[0].length();
         if (iHeaderAndBodyLen + 4 == buffer.remaining()) {
-        	buffer.position(iHeaderAndBodyLen + 4);
+            buffer.position(iHeaderAndBodyLen + 4);
         } else {
-        	// handle invalid header(include none-ASCII characters)
-        	try {
-        		String strASCII = new String(headersAndBody[0].getBytes(), "US-ASCII");
-        		buffer.position(strASCII.length() + 4);
-        	} catch (UnsupportedEncodingException e) {
-        		buffer.position(buffer.limit());
-    		}
+            // handle invalid header(include none-ASCII characters)
+            try {
+                String strASCII = new String(headersAndBody[0].getBytes(), "US-ASCII");
+                buffer.position(strASCII.length() + 4);
+            } catch (UnsupportedEncodingException e) {
+                buffer.position(buffer.limit());
+            }
         }
 
         return new HttpRequestImpl(version, method, requestedPath, queryString, generalHeaders);
