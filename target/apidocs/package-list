@@ -1,9 +1,0 @@
-com.fenglinga.tinyspring
-com.fenglinga.tinyspring.common
-com.fenglinga.tinyspring.framework
-com.fenglinga.tinyspring.framework.annotation
-com.fenglinga.tinyspring.framework.annotation.websocket
-com.fenglinga.tinyspring.framework.websocket
-com.fenglinga.tinyspring.mysql
-com.fenglinga.tinyspring.scheduling
-com.fenglinga.tinyspring.scheduling.annotation
