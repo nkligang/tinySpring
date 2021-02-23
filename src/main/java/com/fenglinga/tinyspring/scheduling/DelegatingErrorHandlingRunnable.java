@@ -1,4 +1,4 @@
-﻿package com.fenglinga.tinyspring.scheduling;
+package com.fenglinga.tinyspring.scheduling;
 
 public class DelegatingErrorHandlingRunnable implements Runnable {
 

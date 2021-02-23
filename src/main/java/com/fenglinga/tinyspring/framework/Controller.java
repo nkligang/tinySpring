@@ -1,4 +1,4 @@
-﻿package com.fenglinga.tinyspring.framework;
+package com.fenglinga.tinyspring.framework;
 
 import java.lang.reflect.Method;
 import java.util.HashMap;

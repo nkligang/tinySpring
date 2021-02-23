@@ -1,4 +1,4 @@
-﻿package com.fenglinga.tinyspring.mysql;
+package com.fenglinga.tinyspring.mysql;
 
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONArray;

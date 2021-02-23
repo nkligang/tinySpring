@@ -1,4 +1,4 @@
-﻿package com.fenglinga.tinyspring.mysql;
+package com.fenglinga.tinyspring.mysql;
 
 import java.util.ArrayList;
 import java.util.HashMap;

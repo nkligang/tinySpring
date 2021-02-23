@@ -1,4 +1,4 @@
-﻿package com.fenglinga.tinyspring.framework.annotation;
+package com.fenglinga.tinyspring.framework.annotation;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;

@@ -1,4 +1,4 @@
-﻿package com.fenglinga.tinyspring.scheduling;
+package com.fenglinga.tinyspring.scheduling;
 
 public class Task {
 	private final Runnable runnable;

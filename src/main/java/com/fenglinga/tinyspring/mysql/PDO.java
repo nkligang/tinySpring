@@ -1,4 +1,4 @@
-﻿package com.fenglinga.tinyspring.mysql;
+package com.fenglinga.tinyspring.mysql;
 
 public class PDO {
 	public static int PARAM_INT = 1;

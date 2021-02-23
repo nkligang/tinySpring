@@ -1,4 +1,4 @@
-﻿package com.fenglinga.tinyspring.scheduling;
+package com.fenglinga.tinyspring.scheduling;
 
 import java.util.ArrayList;
 import java.util.BitSet;

@@ -1,4 +1,4 @@
-﻿package com.fenglinga.tinyspring.scheduling.annotation;
+package com.fenglinga.tinyspring.scheduling.annotation;
 
 import java.lang.annotation.Documented;
 import java.lang.annotation.ElementType;

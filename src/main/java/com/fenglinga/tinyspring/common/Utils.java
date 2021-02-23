@@ -1,4 +1,4 @@
-﻿package com.fenglinga.tinyspring.common;
+package com.fenglinga.tinyspring.common;
 
 import java.net.InetAddress;
 import java.net.InterfaceAddress;

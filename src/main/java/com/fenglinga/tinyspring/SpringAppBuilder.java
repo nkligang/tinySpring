@@ -1,4 +1,4 @@
-﻿package com.fenglinga.tinyspring;
+package com.fenglinga.tinyspring;
 
 import java.net.InetSocketAddress;
 import java.nio.charset.Charset;

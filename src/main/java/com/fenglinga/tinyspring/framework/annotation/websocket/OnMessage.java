@@ -1,4 +1,4 @@
-﻿package com.fenglinga.tinyspring.framework.annotation.websocket;
+package com.fenglinga.tinyspring.framework.annotation.websocket;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
