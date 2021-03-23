@@ -460,6 +460,7 @@ public class HttpServerHandler extends IoHandlerAdapter {
                                 inputStream.skip(rangeStartBytes);
                             }
                             while ((nRead = inputStream.read(buffer)) != -1) {
+                            	if (nRead == 0) break;
                                 ByteBuffer outbuffer = ByteBuffer.wrap(buffer, 0, nRead);
                                 WriteFuture writeFuture = session.write(outbuffer);
                                 while (!writeFuture.isWritten()) {
@@ -483,6 +484,7 @@ public class HttpServerHandler extends IoHandlerAdapter {
                 InputStream inputStream = new FileInputStream(resFile);
                 int nRead = 0;
                 while ((nRead = inputStream.read(buffer)) != -1) {
+                	if (nRead == 0) break;
                     ByteBuffer outbuffer = ByteBuffer.wrap(buffer, 0, nRead);
                     session.write(outbuffer);
                 }
