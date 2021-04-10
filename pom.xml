@@ -2,9 +2,9 @@
   xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
 
-  <groupId>com.fenglinga.tinyspring</groupId>
-  <artifactId>com.fenglinga.tinyspring</artifactId>
-  <version>1.0.0</version>
+  <groupId>com.fenglinga</groupId>
+  <artifactId>tinyspring</artifactId>
+  <version>1.0.1</version>
   <packaging>jar</packaging>
 
   <name>com.tiny.spring</name>
@@ -69,12 +69,7 @@
     <dependency>
         <groupId>org.apache.mina</groupId>
         <artifactId>mina-core</artifactId>
-        <version>2.1.4</version>
-    </dependency>
-    <dependency>
-        <groupId>org.apache.mina</groupId>
-        <artifactId>mina-http</artifactId>
-        <version>2.1.4</version>
+        <version>2.0.7</version>
     </dependency>
   </dependencies>
     <distributionManagement>
