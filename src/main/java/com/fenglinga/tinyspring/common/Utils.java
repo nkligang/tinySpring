@@ -1386,7 +1386,17 @@ public final class Utils {
         final Base64 base64 = new Base64();
         try {
             final byte[] textByte = src.getBytes("UTF-8");
-            return new String(base64.decode(textByte), "UTF-8");
+            return new String(base64.encode(textByte), "UTF-8");
+        } catch (UnsupportedEncodingException e) {
+            e.printStackTrace();
+            return "";
+        }
+    }
+    
+    public static String EncodeBase64(byte[] textByte) {
+        final Base64 base64 = new Base64();
+        try {
+            return new String(base64.encode(textByte), "UTF-8");
         } catch (UnsupportedEncodingException e) {
             e.printStackTrace();
             return "";
@@ -1397,7 +1407,7 @@ public final class Utils {
         final Base64 base64 = new Base64();
         try {
             final byte[] textByte = src.getBytes("UTF-8");
-            return new String(base64.encode(textByte), "UTF-8");
+            return new String(base64.decode(textByte), "UTF-8");
         } catch (Exception e) {
             e.printStackTrace();
             return "";

@@ -34,9 +34,21 @@ public class SpringAppBuilder {
     private boolean mMainThreadExit = false;
     
     private Runnable mInitializer = null;
+    private Runnable mRunner = null;
+    private Runnable mDeInitializer = null;
     
     public SpringAppBuilder setInitializer(Runnable init) {
         mInitializer = init;
+        return this;
+    }
+    
+    public SpringAppBuilder setRunner(Runnable runner) {
+    	mRunner = runner;
+        return this;
+    }
+    
+    public SpringAppBuilder setDeInitializer(Runnable deInit) {
+    	mDeInitializer = deInit;
         return this;
     }
 
@@ -148,12 +160,19 @@ public class SpringAppBuilder {
                         gcStartTime = currentTimeMillis;
                         System.gc();
                     }
+                    if (mRunner != null) {
+                    	mRunner.run();
+                    }
                     Thread.sleep(10);
                 } catch (Exception e) {
                     Constants.LOGGER.error(e.getMessage(), e);
                     mShutdownEnabled = true;
                     break;
                 }
+            }
+            
+            if (mDeInitializer != null) {
+            	mDeInitializer.run();
             }
             
             if (websocketPort != null) {

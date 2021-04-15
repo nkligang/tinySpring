@@ -662,6 +662,9 @@ public class HttpServerHandler extends IoHandlerAdapter {
                 pv = session;
             } else if (simpleName.equals("MultipartFile")) {
                 pv = allParameters.get(paramName);
+            } else if (simpleName.equals("IoBuffer")) {
+                IoBuffer content = (IoBuffer)session.getAttribute("Content");
+                pv = content;
             } else if (simpleName.equals("bool")) {
                 pv = allParameters.get(paramName);
                 if (pv == null) {
