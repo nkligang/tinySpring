@@ -42,12 +42,14 @@ import org.apache.velocity.app.VelocityEngine;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONObject;
 import com.fenglinga.tinyspring.common.Constants;
 import com.fenglinga.tinyspring.common.Utils;
 import com.fenglinga.tinyspring.framework.annotation.AfterReturning;
 import com.fenglinga.tinyspring.framework.annotation.Aspect;
 import com.fenglinga.tinyspring.framework.annotation.Controller;
+import com.fenglinga.tinyspring.framework.annotation.RequestBody;
 import com.fenglinga.tinyspring.framework.annotation.RequestMapping;
 import com.fenglinga.tinyspring.framework.annotation.ResponseBody;
 import com.fenglinga.tinyspring.framework.annotation.RestController;
@@ -649,53 +651,72 @@ public class HttpServerHandler extends IoHandlerAdapter {
             String simpleName = type.getSimpleName();
             String paramName = parameter.getName();
             Object pv = null;
-            if (simpleName.equals("VelocityContext")) {
-                pv = new VelocityContext();
-            } else if (simpleName.equals("HttpServletResponse")) {
-                pv = new HttpServletResponse();
-                session.setAttribute("Response", pv);
-            } else if (simpleName.equals("HttpRequest")) {
-                pv = request;
-            } else if (simpleName.equals("HttpServerHandler")) {
-                pv = this;
-            } else if (simpleName.equals("IoSession")) {
-                pv = session;
-            } else if (simpleName.equals("MultipartFile")) {
-                pv = allParameters.get(paramName);
-            } else if (simpleName.equals("IoBuffer")) {
-                IoBuffer content = (IoBuffer)session.getAttribute("Content");
-                pv = content;
-            } else if (simpleName.equals("bool")) {
-                pv = allParameters.get(paramName);
-                if (pv == null) {
-                    throw new Exception("必填" + simpleName + "类型字段" + paramName + "不能为空");
-                }
-                pv = Boolean.valueOf(String.valueOf(pv));
-            } else if (simpleName.equals("int")) {
-                pv = allParameters.get(paramName);
-                if (pv == null) {
-                    throw new Exception("必填" + simpleName + "类型字段" + paramName + "不能为空");
-                }
-                pv = Integer.valueOf(String.valueOf(pv));
-            } else if (simpleName.equals("float")) {
-                pv = allParameters.get(paramName);
-                if (pv == null) {
-                    throw new Exception("必填" + simpleName + "类型字段" + paramName + "不能为空");
-                }
-                pv = Float.valueOf(String.valueOf(pv));
-            } else if (simpleName.equals("double")) {
-                pv = allParameters.get(paramName);
-                if (pv == null) {
-                    throw new Exception("必填" + simpleName + "类型字段" + paramName + "不能为空");
-                }
-                pv = Double.valueOf(String.valueOf(pv));
-            } else if (simpleName.equals("String")) {
-                pv = allParameters.get(paramName);
-                if (pv != null) {
-                    pv = Utils.decodeURLString((String)pv);
-                }
+            RequestBody rb = parameter.getAnnotation(RequestBody.class);
+            if (rb != null) {
+            	IoBuffer content = (IoBuffer)session.getAttribute("Content");
+            	if (content != null) {
+                    String postContent = new String(content.array(), content.position(), content.remaining(), "UTF-8");
+                	if (simpleName.equals("String")) {
+                		pv = postContent;
+                	} else if (simpleName.equals("JSONObject")) {
+                		pv = JSON.parseObject(postContent);
+                	} else if (simpleName.equals("JSONArray")) {
+                		pv = JSON.parseArray(postContent);
+                	}
+            	} else {
+            		if (rb.required()) {
+            			throw new Exception("必填@RequestBody " + simpleName + " " + paramName + "不能为空");
+            		}
+            	}
             } else {
-                throw new Exception(simpleName + "类型字段" + paramName + "未处理");
+	            if (simpleName.equals("VelocityContext")) {
+	                pv = new VelocityContext();
+	            } else if (simpleName.equals("HttpServletResponse")) {
+	                pv = new HttpServletResponse();
+	                session.setAttribute("Response", pv);
+	            } else if (simpleName.equals("HttpRequest")) {
+	                pv = request;
+	            } else if (simpleName.equals("HttpServerHandler")) {
+	                pv = this;
+	            } else if (simpleName.equals("IoSession")) {
+	                pv = session;
+	            } else if (simpleName.equals("MultipartFile")) {
+	                pv = allParameters.get(paramName);
+	            } else if (simpleName.equals("IoBuffer")) {
+	                IoBuffer content = (IoBuffer)session.getAttribute("Content");
+	                pv = content;
+	            } else if (simpleName.equals("bool")) {
+	                pv = allParameters.get(paramName);
+	                if (pv == null) {
+	                    throw new Exception("必填" + simpleName + "类型字段" + paramName + "不能为空");
+	                }
+	                pv = Boolean.valueOf(String.valueOf(pv));
+	            } else if (simpleName.equals("int")) {
+	                pv = allParameters.get(paramName);
+	                if (pv == null) {
+	                    throw new Exception("必填" + simpleName + "类型字段" + paramName + "不能为空");
+	                }
+	                pv = Integer.valueOf(String.valueOf(pv));
+	            } else if (simpleName.equals("float")) {
+	                pv = allParameters.get(paramName);
+	                if (pv == null) {
+	                    throw new Exception("必填" + simpleName + "类型字段" + paramName + "不能为空");
+	                }
+	                pv = Float.valueOf(String.valueOf(pv));
+	            } else if (simpleName.equals("double")) {
+	                pv = allParameters.get(paramName);
+	                if (pv == null) {
+	                    throw new Exception("必填" + simpleName + "类型字段" + paramName + "不能为空");
+	                }
+	                pv = Double.valueOf(String.valueOf(pv));
+	            } else if (simpleName.equals("String")) {
+	                pv = allParameters.get(paramName);
+	                if (pv != null) {
+	                    pv = Utils.decodeURLString((String)pv);
+	                }
+	            } else {
+	                throw new Exception(simpleName + "类型字段" + paramName + "未处理");
+	            }
             }
             LOGGER.debug("type: " + simpleName + " name: " + paramName + " => " + String.valueOf(pv));
             params.add(pv);

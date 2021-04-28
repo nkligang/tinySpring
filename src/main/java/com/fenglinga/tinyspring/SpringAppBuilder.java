@@ -7,12 +7,14 @@ import java.util.concurrent.TimeUnit;
 
 import org.apache.mina.core.filterchain.DefaultIoFilterChainBuilder;
 import org.apache.mina.filter.codec.ProtocolCodecFilter;
+import org.apache.mina.filter.ssl.SslFilter;
 import org.apache.mina.http.HttpServerCodec;
 import org.apache.mina.transport.socket.nio.NioSocketAcceptor;
 
 import com.fenglinga.tinyspring.common.Constants;
 import com.fenglinga.tinyspring.framework.HttpServerHandler;
 import com.fenglinga.tinyspring.framework.WebsocketServerHandler;
+import com.fenglinga.tinyspring.framework.ssl.BogusSslContextFactory;
 import com.fenglinga.tinyspring.framework.websocket.WebSocketDecoder;
 import com.fenglinga.tinyspring.framework.websocket.WebSocketEncoder;
 import com.fenglinga.tinyspring.mysql.Db;
@@ -82,6 +84,10 @@ public class SpringAppBuilder {
             mAcceptor = new NioSocketAcceptor();
 
             DefaultIoFilterChainBuilder chain = mAcceptor.getFilterChain();
+            String ssl = Constants.Config.getString("server.ssl.key-store");
+            if (ssl != null && ssl.length() > 0) {
+            	addSSLSupport(chain);
+            }
             // Create a service configuration
             chain.addLast("protocolFilter", new HttpServerCodec());
             
@@ -204,5 +210,11 @@ public class SpringAppBuilder {
             mAcceptor.dispose();
         }
         return true;
+    }
+    
+    private void addSSLSupport(DefaultIoFilterChainBuilder chain) throws Exception {
+        SslFilter sslFilter = new SslFilter(BogusSslContextFactory.getInstance(true));
+        chain.addLast("sslFilter", sslFilter);
+        System.out.println("SSL ON");
     }
 }
