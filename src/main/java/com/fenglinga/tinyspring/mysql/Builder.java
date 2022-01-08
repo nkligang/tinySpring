@@ -116,9 +116,13 @@ public class Builder extends BaseObject {
                     String val = on.getString(j);
                     if (val.indexOf("=") > 0) {
                         JSONArray vals = explode("=", val);
-                        String val1 = vals.getString(0);
-                        String val2 = vals.getString(1);
-                        condition.add(this.parseKey(val1, options) + "=" + this.parseKey(val2, options));
+                        if (vals.size() == 2) {
+                            String val1 = vals.getString(0);
+                            String val2 = vals.getString(1);
+                            condition.add(this.parseKey(val1, options) + "=" + this.parseKey(val2, options));
+                        } else {
+                        	condition.add(val);
+                        }
                     } else {
                         condition.add(val);
                     }

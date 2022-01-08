@@ -43,4 +43,17 @@ public class Controller {
     protected JSONObject onRequest(Method method, String requestPath) throws Exception {
         return new JSONObject();
     }
+    
+    public class ResolveParameterTypeResult {
+    	public boolean resolved;
+    	public Object value;
+    	
+    	public ResolveParameterTypeResult(boolean r, Object v) {
+    		this.resolved = r;
+    		this.value = v;
+    	}
+    }
+    protected ResolveParameterTypeResult resolveParameterType(Class<?> type, String paramName, Object paramValue) throws Exception {
+    	return null;
+    }
 }

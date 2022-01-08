@@ -1,6 +1,5 @@
 package com.fenglinga.tinyspring.mysql;
 
-import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONArray;
 import com.alibaba.fastjson.JSONObject;
 import com.fenglinga.tinyspring.common.Utils;
@@ -474,7 +473,7 @@ public class Query extends BaseObject {
     
     public JSONObject getBind()
     {
-        JSONObject bind = JSON.parseObject(this.bind.toString());
+        JSONObject bind = (JSONObject)this.bind.clone();
         this.bind = new JSONObject();
         return bind;
     }
@@ -716,7 +715,7 @@ public class Query extends BaseObject {
     }
     
     private JSONObject parseExpress() {
-        JSONObject options = JSON.parseObject(this.options.toString());
+        JSONObject options = (JSONObject)this.options.clone();
         // 获取数据表
         if (!options.containsKey("table")) {
             options.put("table", this.getTable());
@@ -995,7 +994,7 @@ public class Query extends BaseObject {
         JSONArray fields = is_string(field) ? explode(",", (String)field) : (JSONArray)field;
         for (int i = 0; i < fields.size(); i++) {
             String key = fields.getString(i);
-            this.data(key, new String[] {"exp", key + "+" + step});
+            this.data(key, array(new String[] {"exp", key + "+" + step}));
         }
         return this;
     }
@@ -1005,14 +1004,14 @@ public class Query extends BaseObject {
         JSONArray fields = is_string(field) ? explode(",", (String)field) : (JSONArray)field;
         for (int i = 0; i < fields.size(); i++) {
             String key = fields.getString(i);
-            this.data(key, new String[] {"exp", key + "-" + step});
+            this.data(key, array(new String[] {"exp", key + "-" + step}));
         }
         return this;
     }
     
     // 使用表达式设置数据
     public Query exp(String field, String value) {
-        this.data(field, new String[] {"exp", value});
+        this.data(field, array(new String[] {"exp", value}));
         return this;
     }
     

@@ -35,13 +35,14 @@ import org.slf4j.LoggerFactory;
 
 public class HttpServerEncoder implements ProtocolEncoder {
     private static final Logger LOG = LoggerFactory.getLogger(HttpServerCodec.class);
+    public static boolean LOG_ENABLED = false;
     private static final CharsetEncoder ENCODER = Charset.forName("UTF-8").newEncoder();
 
     public void encode(IoSession session, Object message, ProtocolEncoderOutput out) throws Exception {
     	//LOG.debug("encode {}", message.getClass().getCanonicalName());
         if (message instanceof HttpResponse) {
             HttpResponse msg = (HttpResponse) message;
-        	LOG.debug("Response Header: {}", message.getClass());
+            if (LOG_ENABLED) LOG.debug("Response Header: {}", message.getClass());
             StringBuilder sb = new StringBuilder(msg.getStatus().line());
 
             for (Map.Entry<String, String> header : msg.getHeaders().entrySet()) {
@@ -55,28 +56,28 @@ public class HttpServerEncoder implements ProtocolEncoder {
             // byte[] bytes = sb.toString().getBytes();
             // out.write(ByteBuffer.wrap(bytes));
             IoBuffer buf = IoBuffer.allocate(sb.length()).setAutoExpand(true);
-            LOG.info("[Response Headers]\r\n" + sb.toString().trim());
+            if (LOG_ENABLED) LOG.debug("[Response Headers]\r\n" + sb.toString().trim());
             buf.putString(sb.toString(), ENCODER);
             buf.flip();
             out.write(buf);
         } else if (message instanceof ByteBuffer) {
-        	LOG.debug("Response Body: {}", message);
+        	if (LOG_ENABLED) LOG.debug("Response Body: {}", message);
         	ByteBuffer buffer = (ByteBuffer) message;
         	IoBuffer buf = IoBuffer.allocate(buffer.capacity()).setAutoExpand(true);
         	String bodyType = (String)session.getAttribute("BodyType");
         	if (bodyType == null || bodyType.equals("String")) {
 	        	String bodyString = new String(buffer.array(), "UTF-8");
 	        	if (bodyString.length() > 4096) {
-	        		LOG.info("[Response Body]\r\n" + bodyString.trim().substring(0, 4096) + "...");
+	        		if (LOG_ENABLED) LOG.debug("[Response Body]\r\n" + bodyString.trim().substring(0, 4096) + "...");
 	        	} else {
-	        		LOG.info("[Response Body]\r\n" + bodyString.trim());
+	        		if (LOG_ENABLED) LOG.debug("[Response Body]\r\n" + bodyString.trim());
 	        	}
         	}
         	buf.put(buffer.array());
         	buf.flip();
         	out.write(buf);
         } else if (message instanceof HttpEndOfContent) {
-        	LOG.debug("Response End: {}", message);
+        	if (LOG_ENABLED) LOG.debug("Response End: {}", message);
             // end of HTTP content
             // keep alive ?
         }

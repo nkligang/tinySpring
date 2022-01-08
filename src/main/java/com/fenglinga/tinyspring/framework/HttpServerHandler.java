@@ -6,6 +6,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Method;
@@ -20,6 +21,8 @@ import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.zip.GZIPOutputStream;
 
 import org.apache.mina.core.buffer.IoBuffer;
@@ -43,9 +46,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.alibaba.fastjson.JSON;
+import com.alibaba.fastjson.JSONArray;
 import com.alibaba.fastjson.JSONObject;
 import com.fenglinga.tinyspring.common.Constants;
 import com.fenglinga.tinyspring.common.Utils;
+import com.fenglinga.tinyspring.framework.Controller.ResolveParameterTypeResult;
 import com.fenglinga.tinyspring.framework.annotation.AfterReturning;
 import com.fenglinga.tinyspring.framework.annotation.Aspect;
 import com.fenglinga.tinyspring.framework.annotation.Controller;
@@ -58,6 +63,7 @@ import com.fenglinga.tinyspring.mysql.Db;
 
 public class HttpServerHandler extends IoHandlerAdapter {
     private final static Logger LOGGER = LoggerFactory.getLogger(HttpServerHandler.class);
+    public static boolean LOG_ENABLED = true;
     private static boolean mShutdown = false;
     protected HashMap<String, String> mContentTypeMap = new HashMap<String, String>();
     private VelocityEngine mVelocityEngine = null;
@@ -67,7 +73,9 @@ public class HttpServerHandler extends IoHandlerAdapter {
     protected List<Method> mAfterReturningMethodList = new ArrayList<Method>();
     /** 是否支持断点续传 */
     private static boolean mRangeSupport = false;
-
+    private static final String BODY_LOG = "body.log";
+    private static final String PARSE_PARAMETER_LOG = "parse.parameter.log";
+    
     public HttpServerHandler() {
         // Images
         mContentTypeMap.put(".jpg", "image/jpeg");
@@ -133,8 +141,8 @@ public class HttpServerHandler extends IoHandlerAdapter {
                 }
             }
         }
-        LOGGER.debug("Found rest controller method:" + mRestControllerMethodMap.size());
-        LOGGER.debug("Found controller method:" + mControllerMethodMap.size());
+        if (LOG_ENABLED) LOGGER.debug("Found rest controller method:" + mRestControllerMethodMap.size());
+        if (LOG_ENABLED) LOGGER.debug("Found controller method:" + mControllerMethodMap.size());
     }
     
     public HashMap<String, Method> getControllerMethodMaps(boolean isRest) {
@@ -153,7 +161,53 @@ public class HttpServerHandler extends IoHandlerAdapter {
 
     @Override
     public void sessionOpened(IoSession session) {
-        LOGGER.debug("OPENED:" + this + "  Session: " + session);
+    	//if (LOG_ENABLED) LOGGER.debug("OPENED:" + this + "  Session: " + session);
+    }
+    
+    public static String getSessionIPAddress(IoSession session) {
+    	if (session == null) return "";
+    	String remoteAddress = session.getRemoteAddress().toString();
+    	int iStartPos = remoteAddress.indexOf("/");
+    	int iEndPos = remoteAddress.lastIndexOf(":");
+    	if (iStartPos < 0 || iEndPos < 0) return "";
+		return remoteAddress.substring(iStartPos+1, iEndPos);
+    }
+
+	private static String getSessionIPAddress(HttpRequest request, IoSession session) {
+		if (request.containsHeader("x-forwarded-for")) {
+			return request.getHeader("x-forwarded-for");
+		}
+		if (request.containsHeader("x_forward_for")) {
+			return request.getHeader("x_forward_for");
+		}
+		return getSessionIPAddress(session);
+    }
+
+    private void writeLog(IoSession session, HttpRequest request, DefaultHttpResponse response, String content) {
+    	if (!LOG_ENABLED) return;
+    	StringBuilder sb = new StringBuilder();
+        sb.append(getSessionIPAddress(request, session)).append(" ");
+        sb.append("\"");
+        sb.append(request.getMethod());
+        sb.append(" ").append(request.getRequestPath());
+        if (request.getQueryString().length() > 0) sb.append("?").append(request.getQueryString());
+        sb.append(" ").append(response.getProtocolVersion());
+        sb.append("\"");
+        sb.append(" ").append(response.getStatus().code());
+        sb.append(" ").append(response.containsHeader("Content-Length") ? response.getHeader("Content-Length") : "-");
+        sb.append(" \"").append(request.getHeader("user-agent")).append("\"");
+        String bodyLog = (String)session.getAttribute(BODY_LOG);
+        if (bodyLog != null) {
+            sb.append("\r\n").append(bodyLog);
+        }
+        String parseParameterLog = (String)session.getAttribute(PARSE_PARAMETER_LOG);
+        if (parseParameterLog != null) {
+            sb.append("\r\n").append(parseParameterLog);
+        }
+        if (mRestControllerMethodMap.containsKey(request.getRequestPath()) && content != null) {
+            sb.append("\r\n").append("[RESPONSE]").append(content);
+        }
+        LOGGER.info(sb.toString());
     }
     
     protected HttpResponse pageAccess(HttpRequest request, String requestPath) {
@@ -164,10 +218,11 @@ public class HttpServerHandler extends IoHandlerAdapter {
         return null;
     }
 
-    protected void pageNotFound(final IoSession session) {
+    protected void pageNotFound(final IoSession session, HttpRequest request) {
         HashMap<String, String> headers = new HashMap<String, String>();
-        HttpResponse response = new DefaultHttpResponse(HttpVersion.HTTP_1_1, HttpStatus.CLIENT_ERROR_NOT_FOUND, headers);
+        DefaultHttpResponse response = new DefaultHttpResponse(HttpVersion.HTTP_1_1, HttpStatus.CLIENT_ERROR_NOT_FOUND, headers);
         session.write(response).addListener(IoFutureListener.CLOSE);
+        writeLog(session, request, response, null);
     }
 
     public static byte[] compress(byte[] bytes) throws IOException {
@@ -184,7 +239,7 @@ public class HttpServerHandler extends IoHandlerAdapter {
         return out.toByteArray();
     }
     
-    public void redirect(IoSession session, String redirectUrl, String setCookie) {
+    public void redirect(IoSession session, HttpRequest request, String redirectUrl, String setCookie) {
         String result = "";
         HashMap<String, String> headers = new HashMap<String, String>();
         headers.put("Content-Type", "text/html; charset=utf-8");
@@ -193,8 +248,9 @@ public class HttpServerHandler extends IoHandlerAdapter {
         if (setCookie != null && setCookie.length() > 0) {
             headers.put("Set-Cookie", setCookie);
         }
-        HttpResponse response = new DefaultHttpResponse(HttpVersion.HTTP_1_1, HttpStatus.REDIRECTION_FOUND, headers);
+        DefaultHttpResponse response = new DefaultHttpResponse(HttpVersion.HTTP_1_1, HttpStatus.REDIRECTION_FOUND, headers);
         session.write(response).addListener(IoFutureListener.CLOSE);
+        writeLog(session, request, response, null);
     }
 
     private void writeResponse(IoSession session, HttpRequest request, String content, String contentType) throws Exception {
@@ -229,11 +285,12 @@ public class HttpServerHandler extends IoHandlerAdapter {
         } else {
             headers.put("Content-Length", String.valueOf(Utils.getContentLenth(content)));
         }
-        HttpResponse response = new DefaultHttpResponse(HttpVersion.HTTP_1_1, HttpStatus.SUCCESS_OK, headers);
+        DefaultHttpResponse response = new DefaultHttpResponse(HttpVersion.HTTP_1_1, HttpStatus.SUCCESS_OK, headers);
         session.write(response);
         if (buffer != null) {
             session.write(buffer).addListener(IoFutureListener.CLOSE);
         }
+        writeLog(session, request, response, content);
     }
     
     private void writeResponse(IoSession session, HttpRequest request, HttpServletResponse servletReponse) throws Exception {
@@ -264,7 +321,6 @@ public class HttpServerHandler extends IoHandlerAdapter {
     private void handleRequest(final IoSession session, HttpRequest request) throws Exception {
         String requestPath = request.getRequestPath();
         requestPath = Utils.decodeURLString(requestPath);
-        LOGGER.debug("Handle request: " + requestPath);
         
         Method foundRestMethod = mRestControllerMethodMap.get(requestPath);
         if (foundRestMethod != null) {
@@ -286,7 +342,7 @@ public class HttpServerHandler extends IoHandlerAdapter {
                 }
                 
                 HashMap<String, Object> allParameters = parseAllParameters(session, request);
-                List<Object> params = getMethodParameters(foundRestMethod, session, request, allParameters);
+                List<Object> params = getMethodParameters(foundRestMethod, session, request, allParameters, controller);
                 controller.setRequest(request);
                 controller.setSession(session);
                 controller.setParameters(allParameters);
@@ -324,39 +380,51 @@ public class HttpServerHandler extends IoHandlerAdapter {
             if (result instanceof JSONObject) {
                 JSONObject resultObject = (JSONObject)result;
                 String resultStr = resultObject.toJSONString();
-                LOGGER.debug("result: " + resultStr);
                 writeResponse(session, request, resultStr, "application/json;charset=utf-8");
                 return;
             } else if (result instanceof String) {
                 String resultStr = (String)result;
-                LOGGER.debug("result: " + resultStr);
                 writeResponse(session, request, resultStr, "text/html;charset=utf-8");
                 return;
             }
         }
         
+        String localFilePath = Constants.AppAssetsPath + "static" + requestPath;
+        final File resFile = new File(localFilePath);
+        boolean staticFileExist = resFile.isFile() && resFile.exists();
+
         Method foundMethod = mControllerMethodMap.get(requestPath);
+        if (foundMethod == null && !staticFileExist) {
+            for (Map.Entry<String, Method> entry : mControllerMethodMap.entrySet()) {
+            	String key = entry.getKey();
+            	if (key.startsWith("^") && key.endsWith("$")) {
+            		Matcher requestPathMatcher = Pattern.compile(key).matcher(requestPath);
+            		if (requestPathMatcher.find()) {
+            			foundMethod = entry.getValue();
+            		}
+            	}
+            }
+        }
         if (foundMethod != null) {
             RequestMapping rm = foundMethod.getAnnotation(RequestMapping.class);
             if (rm == null) {
                 return;
             }
-            HashMap<String, Object> allParameters = parseAllParameters(session, request);
-            List<Object> params = getMethodParameters(foundMethod, session, request, allParameters);
-            VelocityContext model = findMethodParameter(params, VelocityContext.class, true);
-            
-            Object result = null;
-            
             Class<?> klass = foundMethod.getDeclaringClass();
             com.fenglinga.tinyspring.framework.Controller controller = (com.fenglinga.tinyspring.framework.Controller)klass.newInstance();
             controller.setRequest(request);
             controller.setSession(session);
+
+            HashMap<String, Object> allParameters = parseAllParameters(session, request);
+            List<Object> params = getMethodParameters(foundMethod, session, request, allParameters, controller);
+            VelocityContext model = findMethodParameter(params, VelocityContext.class, true);
             controller.setParameters(allParameters);
             
+            Object result = null;            
             JSONObject reqObj = controller.onRequest(foundMethod, requestPath);
             if (!reqObj.isEmpty()) {
                 String login_url = Constants.Config.getString("server.login_url");
-                redirect(session, login_url, null);
+                redirect(session, request, login_url, null);
                 return;
             } else {
                 result = foundMethod.invoke(controller, params.toArray());
@@ -378,16 +446,21 @@ public class HttpServerHandler extends IoHandlerAdapter {
                         String redirctPrefix = "redirect:";
                         if (resultStr.startsWith(redirctPrefix)) {
                             String redirectURL = resultStr.substring(redirctPrefix.length());
-                            redirect(session, redirectURL, null);
+                            redirect(session, request, redirectURL, null);
                             return;
                         } else {
                             String templateFile = resultStr;
-                            String localFilePath = Constants.AppAssetsPath + "templates/" + templateFile;
-                            File resFile = new File(localFilePath);
-                            if (resFile.exists()) {
-                                Template template = mVelocityEngine.getTemplate(templateFile, "UTF-8");
+                            String localTemplateFilePath = Constants.AppAssetsPath + "templates/" + templateFile;
+                            File resTemplateFile = new File(localTemplateFilePath);
+                            if (resTemplateFile.exists()) {
                                 StringWriter writer = new StringWriter();
-                                template.merge(model, writer);
+                            	try {
+                                    Template template = mVelocityEngine.getTemplate(templateFile, "UTF-8");
+                                    template.merge(model, writer);
+                            	} catch (Exception e) {
+                            		PrintWriter printWriter = new PrintWriter(writer);
+                            		e.printStackTrace(printWriter);
+                            	}
                                 String resultString = writer.toString();
                                 writeResponse(session, request, resultString, "text/html;charset=utf-8");
                                 return;
@@ -398,9 +471,7 @@ public class HttpServerHandler extends IoHandlerAdapter {
             }
         }
         
-        String localFilePath = Constants.AppAssetsPath + "static" + requestPath;
-        final File resFile = new File(localFilePath);
-        if (resFile.isFile() && resFile.exists()) {
+        if (staticFileExist) {
             HashMap<String, String> headers = new HashMap<String, String>();
             String contentType = null;
             int iLastIndex = localFilePath.lastIndexOf('.');
@@ -445,9 +516,10 @@ public class HttpServerHandler extends IoHandlerAdapter {
             headers.put("Last-Modified", Utils.formatTimeMSString(resFile.lastModified(), "EEE, dd MMM yyyy HH:mm:ss 'GMT'"));
             headers.put("ETag", Utils.HashToMD5Hex(localFilePath) + ":0");
 
-            HttpResponse response = new DefaultHttpResponse(HttpVersion.HTTP_1_1, status, headers);
+            DefaultHttpResponse response = new DefaultHttpResponse(HttpVersion.HTTP_1_1, status, headers);
             session.write(response);
-
+            writeLog(session, request, response, null);
+            
             // Use this for reading the data.
             session.setAttribute("BodyType", "byte[]");
             if (resFile.length() > 4 * 1024 * 1024) {
@@ -494,7 +566,7 @@ public class HttpServerHandler extends IoHandlerAdapter {
                 session.close(false);
             }
         } else {
-            pageNotFound(session);
+            pageNotFound(session, request);
         }
     }
     
@@ -595,6 +667,7 @@ public class HttpServerHandler extends IoHandlerAdapter {
             if (content != null) {            
                 String boundaryValue = getMultipartBoundaryValue(request);
                 if (boundaryValue.length() > 0) {
+                	session.setAttribute(BODY_LOG, "[MULTIPART]" + boundaryValue);
                     List<MultipartFormData> multipartFormDatas = parseMultipartFormData(boundaryValue, content);
                     for (MultipartFormData formData : multipartFormDatas) {
                         HashMap<String, String> headers = Utils.parseURLParameters(formData.header, "\r\n", ":");
@@ -614,6 +687,7 @@ public class HttpServerHandler extends IoHandlerAdapter {
                     }
                 } else {
                     String postData = new String(content.array(), content.position(), content.remaining(), "UTF-8");
+                	session.setAttribute(BODY_LOG, "[BODY]" + postData);
                     HashMap<String, List<String>> parameterMap = Utils.parseURLParametersEx(postData);
                     for (Entry<String, List<String>> entry : parameterMap.entrySet()) {
                         List<String> valueList = entry.getValue();
@@ -639,8 +713,9 @@ public class HttpServerHandler extends IoHandlerAdapter {
         return result;
     }
     
-    public List<Object> getMethodParameters(Method method, IoSession session, HttpRequest request, HashMap<String, Object> allParameters) throws Exception {
-        Parameter[] parameters = method.getParameters();
+    public List<Object> getMethodParameters(Method method, IoSession session, HttpRequest request, HashMap<String, Object> allParameters, com.fenglinga.tinyspring.framework.Controller controller) throws Exception {
+        StringBuilder sb = new StringBuilder();
+    	Parameter[] parameters = method.getParameters();
         List<Object> params = new ArrayList<Object>();
         for (int i = 0; i < parameters.length; i++) {
             Parameter parameter = parameters[i];
@@ -648,7 +723,7 @@ public class HttpServerHandler extends IoHandlerAdapter {
                 throw new Exception("Unsupport java version");
             }
             Class<?> type = parameter.getType();
-            String simpleName = type.getSimpleName();
+            String className = type.getName();
             String paramName = parameter.getName();
             Object pv = null;
             RequestBody rb = parameter.getAnnotation(RequestBody.class);
@@ -656,71 +731,159 @@ public class HttpServerHandler extends IoHandlerAdapter {
             	IoBuffer content = (IoBuffer)session.getAttribute("Content");
             	if (content != null) {
                     String postContent = new String(content.array(), content.position(), content.remaining(), "UTF-8");
-                	if (simpleName.equals("String")) {
+                	if (className.equals(String.class.getName())) {
                 		pv = postContent;
-                	} else if (simpleName.equals("JSONObject")) {
+                	} else if (className.equals(JSONObject.class.getName())) {
                 		pv = JSON.parseObject(postContent);
-                	} else if (simpleName.equals("JSONArray")) {
+                	} else if (className.equals(JSONArray.class.getName())) {
                 		pv = JSON.parseArray(postContent);
+    	            } else {
+    	            	ResolveParameterTypeResult rpt = controller.resolveParameterType(type, paramName, allParameters.get(paramName));
+    	            	if (rpt != null && rpt.resolved) {
+    	            		pv = rpt.value;
+    	            	} else {
+       		                throw new Exception(className + "类型字段" + paramName + "未处理");
+    	            	}
                 	}
             	} else {
             		if (rb.required()) {
-            			throw new Exception("必填@RequestBody " + simpleName + " " + paramName + "不能为空");
+            			throw new Exception("必填@RequestBody " + className + " " + paramName + "不能为空");
             		}
             	}
             } else {
-	            if (simpleName.equals("VelocityContext")) {
-	                pv = new VelocityContext();
-	            } else if (simpleName.equals("HttpServletResponse")) {
+	            if (className.equals(VelocityContext.class.getName())) {
+	            	VelocityContext vc = new VelocityContext();
+	            	vc.put("application", Constants.Config);
+	            	pv = vc;
+	            } else if (className.equals(HttpServletResponse.class.getName())) {
 	                pv = new HttpServletResponse();
 	                session.setAttribute("Response", pv);
-	            } else if (simpleName.equals("HttpRequest")) {
+	            } else if (className.equals(HttpRequest.class.getName())) {
 	                pv = request;
-	            } else if (simpleName.equals("HttpServerHandler")) {
+	            } else if (className.equals(HttpServerHandler.class.getName())) {
 	                pv = this;
-	            } else if (simpleName.equals("IoSession")) {
+	            } else if (className.equals(IoSession.class.getName())) {
 	                pv = session;
-	            } else if (simpleName.equals("MultipartFile")) {
+	            } else if (className.equals(MultipartFile.class.getName())) {
 	                pv = allParameters.get(paramName);
-	            } else if (simpleName.equals("IoBuffer")) {
+	            } else if (className.equals(IoBuffer.class.getName())) {
 	                IoBuffer content = (IoBuffer)session.getAttribute("Content");
 	                pv = content;
-	            } else if (simpleName.equals("bool")) {
+	            } else if (className.equals(boolean.class.getName())) {
 	                pv = allParameters.get(paramName);
 	                if (pv == null) {
-	                    throw new Exception("必填" + simpleName + "类型字段" + paramName + "不能为空");
+	                    throw new Exception("必填" + className + "类型字段" + paramName + "不能为空");
 	                }
 	                pv = Boolean.valueOf(String.valueOf(pv));
-	            } else if (simpleName.equals("int")) {
+	            } else if (className.equals(byte.class.getName())) {
 	                pv = allParameters.get(paramName);
 	                if (pv == null) {
-	                    throw new Exception("必填" + simpleName + "类型字段" + paramName + "不能为空");
+	                    throw new Exception("必填" + className + "类型字段" + paramName + "不能为空");
+	                }
+	                pv = Byte.valueOf(String.valueOf(pv));
+	            } else if (className.equals(char.class.getName())) {
+	                pv = allParameters.get(paramName);
+	                if (pv == null) {
+	                    throw new Exception("必填" + className + "类型字段" + paramName + "不能为空");
+	                }
+	                pv = (char)(int)Integer.valueOf(String.valueOf(pv));
+	            } else if (className.equals(short.class.getName())) {
+	                pv = allParameters.get(paramName);
+	                if (pv == null) {
+	                    throw new Exception("必填" + className + "类型字段" + paramName + "不能为空");
+	                }
+	                pv = Short.valueOf(String.valueOf(pv));
+	            } else if (className.equals(int.class.getName())) {
+	                pv = allParameters.get(paramName);
+	                if (pv == null) {
+	                    throw new Exception("必填" + className + "类型字段" + paramName + "不能为空");
 	                }
 	                pv = Integer.valueOf(String.valueOf(pv));
-	            } else if (simpleName.equals("float")) {
+	            } else if (className.equals(long.class.getName())) {
 	                pv = allParameters.get(paramName);
 	                if (pv == null) {
-	                    throw new Exception("必填" + simpleName + "类型字段" + paramName + "不能为空");
+	                    throw new Exception("必填" + className + "类型字段" + paramName + "不能为空");
+	                }
+	                pv = Long.valueOf(String.valueOf(pv));
+	            } else if (className.equals(float.class.getName())) {
+	                pv = allParameters.get(paramName);
+	                if (pv == null) {
+	                    throw new Exception("必填" + className + "类型字段" + paramName + "不能为空");
 	                }
 	                pv = Float.valueOf(String.valueOf(pv));
-	            } else if (simpleName.equals("double")) {
+	            } else if (className.equals(double.class.getName())) {
 	                pv = allParameters.get(paramName);
 	                if (pv == null) {
-	                    throw new Exception("必填" + simpleName + "类型字段" + paramName + "不能为空");
+	                    throw new Exception("必填" + className + "类型字段" + paramName + "不能为空");
 	                }
 	                pv = Double.valueOf(String.valueOf(pv));
-	            } else if (simpleName.equals("String")) {
+	            } else if (className.equals(String.class.getName())) {
 	                pv = allParameters.get(paramName);
 	                if (pv != null) {
 	                    pv = Utils.decodeURLString((String)pv);
 	                }
+	            } else if (className.equals(Byte.class.getName())) {
+	                String obj = (String)allParameters.get(paramName);
+	                if (obj != null && obj.length() > 0) {
+	                    pv = Byte.valueOf(obj);
+	                } else {
+	                	pv = null;
+	                }
+	            } else if (className.equals(Character.class.getName())) {
+	                String obj = (String)allParameters.get(paramName);
+	                if (obj != null && obj.length() > 0) {
+	                    pv = new Character((char)Integer.valueOf(obj).intValue());
+	                } else {
+	                	pv = null;
+	                }
+	            } else if (className.equals(Boolean.class.getName())) {
+	                String obj = (String)allParameters.get(paramName);
+	                if (obj != null && obj.length() > 0) {
+	                    pv = Boolean.valueOf(obj);
+	                } else {
+	                	pv = null;
+	                }
+	            } else if (className.equals(Short.class.getName())) {
+	                String obj = (String)allParameters.get(paramName);
+	                if (obj != null && obj.length() > 0) {
+	                    pv = Short.valueOf(obj);
+	                } else {
+	                	pv = null;
+	                }
+	            } else if (className.equals(Integer.class.getName())) {
+	                String obj = (String)allParameters.get(paramName);
+	                if (obj != null && obj.length() > 0) {
+	                    pv = Integer.valueOf(obj);
+	                } else {
+	                	pv = null;
+	                }
+	            } else if (className.equals(Long.class.getName())) {
+	                String obj = (String)allParameters.get(paramName);
+	                if (obj != null && obj.length() > 0) {
+	                    pv = Long.valueOf(obj);
+	                } else {
+	                	pv = null;
+	                }
+	            } else if (className.equals(Double.class.getName())) {
+	                String obj = (String)allParameters.get(paramName);
+	                if (obj != null && obj.length() > 0) {
+	                    pv = Double.valueOf(obj);
+	                } else {
+	                	pv = null;
+	                }
 	            } else {
-	                throw new Exception(simpleName + "类型字段" + paramName + "未处理");
+	            	ResolveParameterTypeResult rpt = controller.resolveParameterType(type, paramName, allParameters.get(paramName));
+	            	if (rpt != null && rpt.resolved) {
+	            		pv = rpt.value;
+	            	} else {
+   		                throw new Exception(className + "类型字段" + paramName + "未处理");
+	            	}
 	            }
             }
-            LOGGER.debug("type: " + simpleName + " name: " + paramName + " => " + String.valueOf(pv));
+            sb.append("[PARAM](" + className + ")" + paramName + "=>[" + (pv instanceof HttpRequest ? ("HttpRequest@" + Integer.toHexString(pv.hashCode())) : String.valueOf(pv))).append("]\r\n");
             params.add(pv);
         }
+        session.setAttribute(PARSE_PARAMETER_LOG, sb.toString().trim());
         return params;
     }
     
@@ -766,7 +929,7 @@ public class HttpServerHandler extends IoHandlerAdapter {
                 content.put(ioBuffer);
             }
         } else if (message instanceof HttpEndOfContent) {
-            HttpEndOfContent endOfContent = (HttpEndOfContent) message;
+            //HttpEndOfContent endOfContent = (HttpEndOfContent) message;
             HttpRequest request = (HttpRequest) session.getAttribute("HttpRequest");
             if (request != null) {
                 if (request.getMethod() == HttpMethod.POST) {
@@ -782,18 +945,17 @@ public class HttpServerHandler extends IoHandlerAdapter {
                     session.close(true);
                 }
             }
-            LOGGER.debug("Response End: {}", endOfContent);
         }
     }
 
     @Override
     public void sessionClosed(IoSession session) throws Exception {
-        LOGGER.debug("CLOSED");
+    	//if (LOG_ENABLED) LOGGER.debug("CLOSED:" + this + "  Session: " + session);
     }
 
     @Override
     public void sessionIdle(IoSession session, IdleStatus status) {
-        LOGGER.debug("*** IDLE #" + session.getIdleCount(IdleStatus.BOTH_IDLE) + " ***");
+    	//if (LOG_ENABLED) LOGGER.debug("*** IDLE #" + session.getIdleCount(IdleStatus.BOTH_IDLE) + " ***");
         session.close(true);
     }
 

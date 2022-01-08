@@ -91,11 +91,11 @@ public class BaseObject {
     /** 数组合并 */
     public static JSONObject array_merge(JSONObject a1, JSONObject a2) {
         JSONObject result = new JSONObject();
-        JSONObject a1Copy = JSON.parseObject(a1.toString());
+        JSONObject a1Copy = (JSONObject)a1.clone();
         for (String key : a1Copy.keySet()) {
             result.put(key, a1Copy.get(key));
         }
-        JSONObject a2Copy = JSON.parseObject(a2.toString());
+        JSONObject a2Copy = (JSONObject)a2.clone();
         for (String key : a2Copy.keySet()) {
             if (result.containsKey(key) && a2Copy.containsKey(key) && (result.get(key) instanceof JSONArray) && (a2Copy.get(key) instanceof JSONArray)) {
                 JSONArray aa1 = result.getJSONArray(key);

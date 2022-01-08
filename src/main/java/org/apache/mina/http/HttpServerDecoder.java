@@ -39,6 +39,7 @@ import org.slf4j.LoggerFactory;
 
 public class HttpServerDecoder implements ProtocolDecoder {
     private static final Logger LOG = LoggerFactory.getLogger(HttpServerCodec.class);
+    public static boolean LOG_ENABLED = false;
 
     /** Key for decoder current state */
     private static final String DECODER_STATE_ATT = "http.ds";
@@ -81,7 +82,7 @@ public class HttpServerDecoder implements ProtocolDecoder {
         }
         switch (state) {
         case HEAD:
-            LOG.debug("Request Head");
+            if (LOG_ENABLED) LOG.debug("Request Head");
             // grab the stored a partial HEAD request
             final ByteBuffer oldBuffer = (ByteBuffer)session.getAttribute(PARTIAL_HEAD_ATT);
             // concat the old buffer and the new incoming one
@@ -94,7 +95,7 @@ public class HttpServerDecoder implements ProtocolDecoder {
             // now let's decode like it was a new message
 
         case NEW:
-            LOG.debug("Request New");
+        	if (LOG_ENABLED) LOG.debug("Request New");
             final HttpRequestImpl rq = parseHttpRequestHead(msg.buf());
 
             if (rq == null) {
@@ -109,17 +110,17 @@ public class HttpServerDecoder implements ProtocolDecoder {
                 out.write(rq);
                 // is it a request with some body content ?
                 if (rq.getMethod() == HttpMethod.POST || rq.getMethod() == HttpMethod.PUT) {
-                    LOG.debug("Request with content");
+                	if (LOG_ENABLED) LOG.debug("Request with content");
                     session.setAttribute(DECODER_STATE_ATT, DecoderState.BODY);
 
                     final String contentLen = rq.getHeader("content-length");
 
                     if (contentLen != null) {
                     	if (Integer.valueOf(contentLen) > 0) {
-                            LOG.debug("found content len : {}", contentLen);
+                    		if (LOG_ENABLED) LOG.debug("found content len : {}", contentLen);
                             session.setAttribute(BODY_REMAINING_BYTES, Integer.valueOf(contentLen));
                     	} else {
-                            LOG.debug("Request without content");
+                    		if (LOG_ENABLED) LOG.debug("Request without content");
                             session.setAttribute(DECODER_STATE_ATT, DecoderState.NEW);
                             out.write(new HttpEndOfContent());
                     	}
@@ -127,7 +128,7 @@ public class HttpServerDecoder implements ProtocolDecoder {
                         throw new HttpException(HttpStatus.CLIENT_ERROR_LENGTH_REQUIRED, "no content length !");
                     }
                 } else {
-                    LOG.debug("Request without content");
+                	if (LOG_ENABLED) LOG.debug("Request without content");
                     session.setAttribute(DECODER_STATE_ATT, DecoderState.NEW);
                     out.write(new HttpEndOfContent());
                     // handle potential attack
@@ -138,7 +139,7 @@ public class HttpServerDecoder implements ProtocolDecoder {
             break;
 
         case BODY:
-            LOG.debug("Request Body: {} bytes", msg.remaining());
+        	if (LOG_ENABLED) LOG.debug("Request Body: {} bytes", msg.remaining());
             final int chunkSize = msg.remaining();
             // send the chunk of body
             if (chunkSize != 0) {
@@ -153,7 +154,7 @@ public class HttpServerDecoder implements ProtocolDecoder {
             remaining -= chunkSize;
 
             if (remaining <= 0) {
-                LOG.debug("end of HTTP body");
+            	if (LOG_ENABLED) LOG.debug("end of HTTP body");
                 session.setAttribute(DECODER_STATE_ATT, DecoderState.NEW);
                 session.removeAttribute(BODY_REMAINING_BYTES);
                 out.write(new HttpEndOfContent());
@@ -177,7 +178,7 @@ public class HttpServerDecoder implements ProtocolDecoder {
     private HttpRequestImpl parseHttpRequestHead(final ByteBuffer buffer) {
     	// Java 6 >> String raw = new String(buffer.array(), 0, buffer.limit(), Charset.forName("UTF-8"));
         final String raw = new String(buffer.array(), 0, buffer.limit(), Charset.forName("UTF-8"));
-        LOG.info("[Request Headers]\r\n" + raw.trim());
+        if (LOG_ENABLED) LOG.debug("[Request Headers]\r\n" + raw.trim());
         final String[] headersAndBody = RAW_VALUE_PATTERN.split(raw, -1);
 
         if (headersAndBody.length <= 1) {
@@ -200,7 +201,7 @@ public class HttpServerDecoder implements ProtocolDecoder {
         final HttpMethod method = HttpMethod.valueOf(elements[0]);
         final HttpVersion version = HttpVersion.fromString(elements[2]);
         final String[] pathFrags = QUERY_STRING_PATTERN.split(elements[1]);
-        final String requestedPath = pathFrags[0];
+        final String requestedPath = pathFrags[0].replace("\\", "/").replace("../", "");
         final String queryString = pathFrags.length == 2 ? pathFrags[1] : "";
 
         // we put the buffer position where we found the beginning of the HTTP body
