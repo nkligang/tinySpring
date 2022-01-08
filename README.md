@@ -6,6 +6,16 @@ A simple and flexible web service framework based on Mina
 4. 支持定时任务,参考SpringBoot
 5. 支持Websocket服务
 
+快速集成：
+============================
+```java
+    <!-- https://mvnrepository.com/artifact/com.fenglinga/tinyspring -->
+    <dependency>
+        <groupId>com.fenglinga</groupId>
+        <artifactId>tinyspring</artifactId>
+        <version>1.0.4</version>
+    </dependency>
+```
 
 如何使用：
 ============================
