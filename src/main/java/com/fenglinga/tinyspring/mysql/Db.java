@@ -1,14 +1,18 @@
 package com.fenglinga.tinyspring.mysql;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map.Entry;
+import java.util.Set;
 
+import com.alibaba.fastjson.JSONArray;
 import com.alibaba.fastjson.JSONObject;
 import com.fenglinga.tinyspring.common.Constants;
+import com.fenglinga.tinyspring.common.Pair;
 import com.fenglinga.tinyspring.common.Utils;
 
 public class Db extends BaseObject {
-    private static HashMap<String,Connection> instance = new HashMap<String,Connection>();
+    private static HashMap<String, Pair<Long, Connection>> instance = new HashMap<String,Pair<Long, Connection>>();
     
     // 数据库初始化 并取得数据库类实例
     public static Connection connect(JSONObject config, String name) {
@@ -19,25 +23,28 @@ public class Db extends BaseObject {
             // 解析连接参数 支持数组和字符串
             JSONObject options = parseConfig(config);
             Connection connection = new Connection(options);
-            instance.put(name, connection);
+            instance.put(name, new Pair<Long, Connection>(Thread.currentThread().getId(), connection));
             return connection;
         }
-        return instance.get(name);
+        Pair<Long, Connection> pair = instance.get(name);
+        return pair.second;
     }
     
     public static void ping() {
         do {
             boolean hasInstanceRemoved = false;
-            for (Entry<String,Connection> entry : instance.entrySet()) {
+            for (Entry<String,Pair<Long, Connection>> entry : instance.entrySet()) {
                 try {
-                    String lastSql = entry.getValue().getLastSql();
+                	Pair<Long, Connection> pair = entry.getValue();
+                	Connection conn =  pair.second;
+                    String lastSql = conn.getLastSql();
                     if (lastSql.equals("SELECT 1")) {
-                        entry.getValue().close();
+                    	conn.close();
                         instance.remove(entry.getKey());
                         hasInstanceRemoved = true;
                         break;
                     }
-                    entry.getValue().execute("SELECT 1");
+                    conn.execute("SELECT 1");
                 } catch (Exception e) {
                     e.printStackTrace();
                 }
@@ -48,6 +55,36 @@ public class Db extends BaseObject {
         } while (true);
     }
     
+    public static void recycle() {
+        do {
+            boolean hasInstanceRemoved = false;
+            try {
+	            Thread[] threads = new Thread[Thread.activeCount()];
+	            Thread.enumerate(threads);
+	            Set<Long> threadIds = new HashSet<Long>();
+	            for (Thread thread : threads) {
+	            	threadIds.add(thread.getId());
+	            }
+	            for (Entry<String,Pair<Long, Connection>> entry : instance.entrySet()) {
+	                Pair<Long, Connection> pair = entry.getValue();
+	                if (threadIds.contains(pair.first)) {
+	                	continue;
+	                }
+                	Connection conn =  pair.second;
+	                conn.close();
+                    instance.remove(entry.getKey());
+                    hasInstanceRemoved = true;
+                    break;
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+            if (!hasInstanceRemoved) {
+                break;
+            }
+        } while (true);
+    }
+
     public static JSONObject parseConfig(JSONObject config) {
         if (empty(config)) {
             config = Constants.getConfig("database");
@@ -74,6 +111,16 @@ public class Db extends BaseObject {
     public static void rollback() throws Exception {
         Query query = new Query(null);
         query.rollback();
+    }
+    
+    public static JSONArray query(String sql) throws Exception {
+        Query query = new Query(null);
+        return (JSONArray)query.query(sql);
+    }
+    
+    public static int execute(String sql) throws Exception {
+        Query query = new Query(null);
+        return query.execute(sql);
     }
     
     public static String getLastSql() {

@@ -2,10 +2,12 @@ package com.fenglinga.tinyspring;
 
 import java.net.InetSocketAddress;
 import java.nio.charset.Charset;
+import java.util.Map;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 import org.apache.mina.core.filterchain.DefaultIoFilterChainBuilder;
+import org.apache.mina.core.session.IoSession;
 import org.apache.mina.filter.codec.ProtocolCodecFilter;
 import org.apache.mina.filter.ssl.SslFilter;
 import org.apache.mina.http.HttpServerCodec;
@@ -80,8 +82,13 @@ public class SpringAppBuilder {
                 mInitializer.run();
             }
 
+            Integer processorCount = Constants.Config.getInteger("server.processor.count");
             // Create an acceptor
-            mAcceptor = new NioSocketAcceptor();
+            if (processorCount != null && processorCount > 0) {
+                mAcceptor = new NioSocketAcceptor(processorCount);
+            } else {
+                mAcceptor = new NioSocketAcceptor();
+            }
 
             DefaultIoFilterChainBuilder chain = mAcceptor.getFilterChain();
             String ssl = Constants.Config.getString("server.ssl.key-store");
@@ -97,10 +104,15 @@ public class SpringAppBuilder {
 
             System.out.println("Http manager server now listening on port " + port);
 
-            Integer websocketPort = Constants.Config.getInteger("webserver.port");
+            Integer websocketPort = Constants.Config.getInteger("websocket.server.port");
             if (websocketPort != null) {
+            	Integer websocketProcessorCount = Constants.Config.getInteger("websocket.server.processor.count");
                 // Create an acceptor
-                mWebsocketAcceptor = new NioSocketAcceptor();
+                if (websocketProcessorCount != null && websocketProcessorCount > 0) {
+                	mWebsocketAcceptor = new NioSocketAcceptor(websocketProcessorCount);
+                } else {
+                    mWebsocketAcceptor = new NioSocketAcceptor();
+                }
 
                 DefaultIoFilterChainBuilder chainWebsocket = mWebsocketAcceptor.getFilterChain();
                 // Create a service configuration
@@ -139,6 +151,12 @@ public class SpringAppBuilder {
                     Db.ping();
                 }
             }, 30 * 60, 30 * 60, TimeUnit.SECONDS);
+            mExecutor.scheduleAtFixedRate(new Runnable() {
+                @Override
+                public void run() {
+                    Db.recycle();
+                }
+            }, 15, 15, TimeUnit.SECONDS);
 
             long debugSessionStartTime = System.currentTimeMillis();
             long debugSessionDelayTime = 10000;
@@ -216,5 +234,19 @@ public class SpringAppBuilder {
         SslFilter sslFilter = new SslFilter(BogusSslContextFactory.getInstance(true));
         chain.addLast("sslFilter", sslFilter);
         System.out.println("SSL ON");
+    }
+    
+    public Map<Long, IoSession> getManagedSessions() {
+    	if (mAcceptor == null) {
+    		return null;
+    	}
+    	return mAcceptor.getManagedSessions();
+    }
+
+    public Map<Long, IoSession> getWebsocketManagedSessions() {
+    	if (mWebsocketAcceptor == null) {
+    		return null;
+    	}
+    	return mWebsocketAcceptor.getManagedSessions();
     }
 }

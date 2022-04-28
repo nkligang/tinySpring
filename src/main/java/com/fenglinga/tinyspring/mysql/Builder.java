@@ -398,22 +398,25 @@ public class Builder extends BaseObject {
     }
     
     protected String parseOrder(Object order, JSONObject options) throws Exception {
-        if (is_map(order)) {
+        if (is_array(order)) {
             JSONArray array = new JSONArray();
-            JSONObject orderObj = (JSONObject)order;
-            for (String key : orderObj.keySet()) {
-                String val = orderObj.getString(key);
-                if (is_numeric(key)) {
-                    if ("[rand]".equals(val)) {
-                        array.add(this.parseRand());
-                    } else if (strpos(val, "(") < 0) {
-                        array.add(this.parseKey(val, options));
+            JSONArray orderArray = (JSONArray)order;
+            for (int i = 0; i < orderArray.size(); i++) {
+                JSONObject orderObj = orderArray.getJSONObject(i);
+                for (String key : orderObj.keySet()) {
+                    String val = orderObj.getString(key);
+                    if (is_numeric(key)) {
+                        if ("[rand]".equals(val)) {
+                            array.add(this.parseRand());
+                        } else if (strpos(val, "(") < 0) {
+                            array.add(this.parseKey(val, options));
+                        } else {
+                            array.add(val);
+                        }
                     } else {
-                        array.add(val);
+                        String sort = in_array(strtolower(trim(val)), new String[] {"asc", "desc"}) ? " " + val : "";
+                        array.add(this.parseKey(key, options) + " " + sort);
                     }
-                } else {
-                    String sort = in_array(strtolower(trim(val)), new String[] {"asc", "desc"}) ? " " + val : "";
-                    array.add(this.parseKey(key, options) + " " + sort);
                 }
             }
             order = implode(",", array);

@@ -4,7 +4,11 @@
  */
 package com.fenglinga.tinyspring.framework.websocket;
 
+import java.io.UnsupportedEncodingException;
+
 import org.apache.mina.core.buffer.IoBuffer;
+
+import com.fenglinga.tinyspring.common.Constants;
 
 /**
  * Defines the class whose objects are understood by websocket encoder.
@@ -38,8 +42,11 @@ public class WebSocketCodecPacket {
      * Builds an instance of WebSocketCodecPacket that simply wraps around 
      * the given String.
      */
-    public static WebSocketCodecPacket buildPacket(String text){
-        return new WebSocketCodecPacket(text);
+    public static WebSocketCodecPacket buildPacket(String text) {
+        return new WebSocketCodecPacket(text, "UTF-8");
+    }
+    public static WebSocketCodecPacket buildPacket(String text, String charsetName) {
+        return new WebSocketCodecPacket(text, charsetName);
     }
     public static WebSocketCodecPacket buildPacketText(IoBuffer buffer){
         return new WebSocketCodecPacket(buffer, PACKET_TYPE_TEXT, false);
@@ -55,9 +62,16 @@ public class WebSocketCodecPacket {
         type = _type;
         mask = hasMask;
     }
-    
-    private WebSocketCodecPacket(String text){
-        packet = IoBuffer.wrap(text.getBytes());
+        
+    private WebSocketCodecPacket(String text, String charsetName) {
+    	byte[] bytes = null;
+    	try {
+			bytes = text.getBytes(charsetName);
+		} catch (UnsupportedEncodingException e) {
+			Constants.LOGGER.error(e.getMessage(), e);
+			bytes = text.getBytes();
+		}
+        packet = IoBuffer.wrap(bytes);
         type = PACKET_TYPE_TEXT;
     }
     
@@ -66,7 +80,12 @@ public class WebSocketCodecPacket {
     }
     
     public String getString() {
-        return new String(packet.array(), packet.position(), packet.remaining());
+        try {
+			return new String(packet.array(), packet.position(), packet.remaining(), "UTF-8");
+		} catch (UnsupportedEncodingException e) {
+			Constants.LOGGER.error(e.getMessage(), e);
+		}
+        return null;
     }
     
     public int getPacketType(){

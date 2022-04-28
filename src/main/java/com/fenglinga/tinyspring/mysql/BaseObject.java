@@ -113,11 +113,11 @@ public class BaseObject {
     public static JSONArray array_merge(JSONArray a1, JSONArray a2) {
         JSONArray result = new JSONArray();
         for (int i = 0; i < a1.size(); i++) {
-            String v = a1.getString(i);
+            Object v = a1.get(i);
             result.add(v);
         }
         for (int i = 0; i < a2.size(); i++) {
-            String v = a2.getString(i);
+            Object v = a2.get(i);
             result.add(v);
         }
         return result;

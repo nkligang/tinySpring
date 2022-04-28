@@ -96,6 +96,22 @@ public class Query extends BaseObject {
         return this;
     }
     
+    public String getFieldByAsName(String asName) {
+    	JSONArray fieldResult = this.options.getJSONArray("field");
+    	for (int i = 0; i < fieldResult.size(); i++) {
+    		String fieldStr = fieldResult.getString(i);
+    		String [] parts = fieldStr.split("as");
+    		if (parts.length == 2 && asName.equals(parts[1].trim())) {
+    			return parts[0].trim();
+    		}
+    		String [] partsDot = fieldStr.split("\\.");
+    		if (partsDot.length == 2 && asName.equals(partsDot[1].trim())) {
+    			return fieldStr;
+    		}
+    	}
+    	return null;
+    }
+    
     public Query join(Object join) throws Exception {
         return join(join, null, "INNER");
     }
@@ -236,6 +252,15 @@ public class Query extends BaseObject {
             throw new Exception("invalid parameter 'alias' type");
         }
         return this;
+    }
+    
+    public String getAliasField(String tableName, String fieldName) {
+        JSONObject aliasObj = this.options.getJSONObject("alias");
+        if (aliasObj != null) {
+            String aliasTableName = aliasObj.getString(tableName);
+            return aliasTableName + "." + fieldName;
+        }
+        return fieldName;
     }
     
     public Query where(Object field) {
@@ -529,10 +554,12 @@ public class Query extends BaseObject {
                 }
             }
             if (!this.options.containsKey("order")) {
-                this.options.put("order", new JSONObject());
+                this.options.put("order", new JSONArray());
             }
             if (is_map(field)) {
-                this.options.put("order", array_merge(this.options.getJSONObject("order"), (JSONObject)field));
+                JSONArray newOrder = new JSONArray();
+                newOrder.add((JSONObject)field);
+                this.options.put("order", array_merge(this.options.getJSONArray("order"), newOrder));
             }
         }
         return this;
@@ -645,8 +672,8 @@ public class Query extends BaseObject {
     
     public int count(String field) throws Exception {
         JSONArray resultArray = this.field("COUNT(" + field + ") AS tp_count").limit(1).getPdo();
-        if (resultArray.size() != 1) {
-            throw new Exception("invalid sql result set size");
+        if (resultArray.size() == 0) {
+            return 0;
         }
         JSONObject result = resultArray.getJSONObject(0);
         return result.getIntValue("tp_count");
@@ -683,6 +710,10 @@ public class Query extends BaseObject {
         return this.connection.query(sql);
     }
     
+    public int execute(String sql) throws Exception {
+        return this.connection.execute(sql);
+    }
+
     public Query fetchSql(boolean fetch) {
         this.options.put("fetch_sql", fetch);
         return this;
@@ -821,6 +852,13 @@ public class Query extends BaseObject {
             Query.info.put(infoKey, newInfo);
         }
         return Query.info.getJSONObject(infoKey);
+    }
+    
+    public void invalidateTableInfo() {
+    	String tableName = this.getTable();
+        String db = (String)this.getConfig("database");
+        String infoKey = db + "." + tableName;
+        Query.info.remove(infoKey);
     }
     
     public Object getTableInfo(String tableName, String fetch) throws Exception {

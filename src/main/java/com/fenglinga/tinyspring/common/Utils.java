@@ -1876,4 +1876,20 @@ public final class Utils {
             }
         }
     }
+    
+    public static byte[] readFileToByteArray(File file) throws IOException {
+        int size = (int)file.length();
+        byte[] data = new byte[size];
+        int offset = 0;
+        int readed;
+        InputStream input = new FileInputStream(file);
+        while (offset < size && (readed = input.read(data, offset, size - offset)) != -1) {
+            offset += readed;
+        }
+        input.close();
+        if (offset != size) {
+            throw new IOException("Unexpected readed size. current: " + offset + ", excepted: " + size);
+        }
+        return data;
+    }
 }

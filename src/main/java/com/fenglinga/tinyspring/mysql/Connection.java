@@ -9,10 +9,12 @@ import java.sql.Statement;
 import com.alibaba.fastjson.JSONArray;
 import com.alibaba.fastjson.JSONObject;
 import com.fenglinga.tinyspring.common.Constants;
+import com.fenglinga.tinyspring.common.Utils;
 
 public class Connection extends BaseObject {
     private java.sql.Connection mConnection = null;
     private String queryStr = "";
+    private String lastTransaction = null;
 
     private JSONObject config = new JSONObject();
     
@@ -86,6 +88,7 @@ public class Connection extends BaseObject {
                 throw ex;
             }
         }
+        Constants.LOGGER.info(mConnection.toString() + ":OPEN");
     }
     
     public JSONArray query(String sql) throws Exception {
@@ -97,13 +100,11 @@ public class Connection extends BaseObject {
         //记录SQL
         this.queryStr = sql;
         
+        long s = Utils.getMSTime();
         Statement stmt = null;
         ResultSet rs = null;
 
         try {
-            if (this.config.getBooleanValue("show-sql")) {
-                Constants.LOGGER.info(mConnection.toString() + ":" + sql);
-            }
             stmt = mConnection.createStatement(
                     ResultSet.TYPE_SCROLL_INSENSITIVE,
                     ResultSet.CONCUR_UPDATABLE);
@@ -112,6 +113,9 @@ public class Connection extends BaseObject {
         } catch (SQLException ex){
             throw ex;
         } finally {
+            if (this.config.getBooleanValue("show-sql")) {
+                Constants.LOGGER.info(mConnection.toString() + "[" + (Utils.getMSTime() - s) + "ms]:" + sql);
+            }
             // it is a good idea to release
             // resources in a finally{} block
             // in reverse-order of their creation
@@ -160,15 +164,13 @@ public class Connection extends BaseObject {
         //记录SQL
         this.queryStr = sql;
         
+        long s = Utils.getMSTime();
         Statement stmt = null;
         ResultSet rs = null;
         boolean result = false;
         int id = -1;
 
         try {
-            if (this.config.getBooleanValue("show-sql")) {
-                Constants.LOGGER.info(mConnection.toString() + ":" + sql);
-            }
             stmt = mConnection.createStatement(
                     ResultSet.TYPE_SCROLL_INSENSITIVE,
                     ResultSet.CONCUR_UPDATABLE);
@@ -186,6 +188,9 @@ public class Connection extends BaseObject {
         } catch (SQLException ex){
             throw ex;
         } finally {
+            if (this.config.getBooleanValue("show-sql")) {
+                Constants.LOGGER.info(mConnection.toString() + "[" + (Utils.getMSTime() - s) + "ms]:" + sql);
+            }
             // it is a good idea to release
             // resources in a finally{} block
             // in reverse-order of their creation
@@ -290,19 +295,28 @@ public class Connection extends BaseObject {
         //mConnection.setAutoCommit(false);
         //System.out.println(mConnection.toString() + ":BEGIN;");
         execute("BEGIN;");
+        lastTransaction = "BEGIN;";
     }
     
     public void commit() throws Exception {
+        if (lastTransaction == null || !lastTransaction.equals("BEGIN;")) {
+        	return;
+        }
         initConnect(false);
         //mConnection.commit();
         //System.out.println(mConnection.toString() + ":COMMIT;");
         execute("COMMIT;");
+        lastTransaction = "COMMIT;";
     }
     
     public void rollback() throws Exception {
+        if (lastTransaction == null || !lastTransaction.equals("BEGIN;")) {
+        	return;
+        }
         initConnect(false);
         //mConnection.rollback();
         //System.out.println(mConnection.toString() + ":ROLLBACK;");
         execute("ROLLBACK;");
+        lastTransaction = "ROLLBACK;";
     }
 }

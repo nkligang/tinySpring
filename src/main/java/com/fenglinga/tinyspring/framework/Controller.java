@@ -5,6 +5,7 @@ import java.util.HashMap;
 
 import org.apache.mina.core.session.IoSession;
 import org.apache.mina.http.api.HttpRequest;
+import org.apache.velocity.VelocityContext;
 
 import com.alibaba.fastjson.JSONObject;
 
@@ -40,7 +41,7 @@ public class Controller {
         return new JSONObject();
     }
     
-    protected JSONObject onRequest(Method method, String requestPath) throws Exception {
+    protected JSONObject onRequest(Method method, String requestPath, VelocityContext model) throws Exception {
         return new JSONObject();
     }
     

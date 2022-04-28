@@ -8,11 +8,13 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.io.UnsupportedEncodingException;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -54,6 +56,7 @@ import com.fenglinga.tinyspring.framework.Controller.ResolveParameterTypeResult;
 import com.fenglinga.tinyspring.framework.annotation.AfterReturning;
 import com.fenglinga.tinyspring.framework.annotation.Aspect;
 import com.fenglinga.tinyspring.framework.annotation.Controller;
+import com.fenglinga.tinyspring.framework.annotation.KeepOriginParameter;
 import com.fenglinga.tinyspring.framework.annotation.RequestBody;
 import com.fenglinga.tinyspring.framework.annotation.RequestMapping;
 import com.fenglinga.tinyspring.framework.annotation.ResponseBody;
@@ -75,6 +78,7 @@ public class HttpServerHandler extends IoHandlerAdapter {
     private static boolean mRangeSupport = false;
     private static final String BODY_LOG = "body.log";
     private static final String PARSE_PARAMETER_LOG = "parse.parameter.log";
+    private static final String REQUEST_ENTER_TIME = "request.enter.time";
     
     public HttpServerHandler() {
         // Images
@@ -161,32 +165,34 @@ public class HttpServerHandler extends IoHandlerAdapter {
 
     @Override
     public void sessionOpened(IoSession session) {
-    	//if (LOG_ENABLED) LOGGER.debug("OPENED:" + this + "  Session: " + session);
+        //if (LOG_ENABLED) LOGGER.debug("OPENED:" + this + "  Session: " + session);
     }
     
     public static String getSessionIPAddress(IoSession session) {
-    	if (session == null) return "";
-    	String remoteAddress = session.getRemoteAddress().toString();
-    	int iStartPos = remoteAddress.indexOf("/");
-    	int iEndPos = remoteAddress.lastIndexOf(":");
-    	if (iStartPos < 0 || iEndPos < 0) return "";
-		return remoteAddress.substring(iStartPos+1, iEndPos);
+        if (session == null) return "";
+        String remoteAddress = session.getRemoteAddress().toString();
+        int iStartPos = remoteAddress.indexOf("/");
+        int iEndPos = remoteAddress.lastIndexOf(":");
+        if (iStartPos < 0 || iEndPos < 0) return "";
+        return remoteAddress.substring(iStartPos+1, iEndPos);
     }
 
-	private static String getSessionIPAddress(HttpRequest request, IoSession session) {
-		if (request.containsHeader("x-forwarded-for")) {
-			return request.getHeader("x-forwarded-for");
-		}
-		if (request.containsHeader("x_forward_for")) {
-			return request.getHeader("x_forward_for");
-		}
-		return getSessionIPAddress(session);
+    private static String getSessionIPAddress(HttpRequest request, IoSession session) {
+        if (request.containsHeader("x-forwarded-for")) {
+            return request.getHeader("x-forwarded-for");
+        }
+        if (request.containsHeader("x_forward_for")) {
+            return request.getHeader("x_forward_for");
+        }
+        return getSessionIPAddress(session);
     }
 
     private void writeLog(IoSession session, HttpRequest request, DefaultHttpResponse response, String content) {
-    	if (!LOG_ENABLED) return;
-    	StringBuilder sb = new StringBuilder();
+        if (!LOG_ENABLED) return;
+        StringBuilder sb = new StringBuilder();
         sb.append(getSessionIPAddress(request, session)).append(" ");
+        long enterTime = (Long)session.getAttribute(REQUEST_ENTER_TIME);
+        sb.append("[").append(Utils.getMSTime() - enterTime).append("ms]").append(" ");
         sb.append("\"");
         sb.append(request.getMethod());
         sb.append(" ").append(request.getRequestPath());
@@ -205,7 +211,12 @@ public class HttpServerHandler extends IoHandlerAdapter {
             sb.append("\r\n").append(parseParameterLog);
         }
         if (mRestControllerMethodMap.containsKey(request.getRequestPath()) && content != null) {
-            sb.append("\r\n").append("[RESPONSE]").append(content);
+        	sb.append("\r\n").append("[RESPONSE]");
+        	if (content.length() > 512) {
+            	sb.append(content.substring(0, 512)).append("...");
+        	} else {
+            	sb.append(content);
+        	}
         }
         LOGGER.info(sb.toString());
     }
@@ -239,6 +250,24 @@ public class HttpServerHandler extends IoHandlerAdapter {
         return out.toByteArray();
     }
     
+    private void addCrossOriginHeaders(HttpRequest request, HashMap<String, String> headers) {
+        String crossOriginHeaders = Constants.Config.getString("server.cross_origin_headers");
+        if (crossOriginHeaders != null && crossOriginHeaders.length() > 0) {
+            String [] heads = crossOriginHeaders.split(";");
+            for (String head : heads) {
+                int idx = head.indexOf(":");
+                if (idx > 0) {
+                    String key = head.substring(0, idx).trim();
+                    String value = head.substring(idx + 1, head.length()).trim();
+                    if (key.toLowerCase().equals("access-control-allow-origin") && value.equals("*")) {
+                        value = request.getHeader("origin");
+                    }
+                    headers.put(key, value);
+                }
+            }
+        }
+    }
+    
     public void redirect(IoSession session, HttpRequest request, String redirectUrl, String setCookie) {
         String result = "";
         HashMap<String, String> headers = new HashMap<String, String>();
@@ -248,12 +277,13 @@ public class HttpServerHandler extends IoHandlerAdapter {
         if (setCookie != null && setCookie.length() > 0) {
             headers.put("Set-Cookie", setCookie);
         }
+        addCrossOriginHeaders(request, headers);
         DefaultHttpResponse response = new DefaultHttpResponse(HttpVersion.HTTP_1_1, HttpStatus.REDIRECTION_FOUND, headers);
         session.write(response).addListener(IoFutureListener.CLOSE);
         writeLog(session, request, response, null);
     }
 
-    private void writeResponse(IoSession session, HttpRequest request, String content, String contentType) throws Exception {
+    private void writeResponse(IoSession session, HttpRequest request, String content, String contentType, HttpServletResponse servletReponse) throws Exception {
         boolean gzipEnabled = false;
         String acceptEncoding = request.getHeader("accept-encoding");
         if (acceptEncoding != null && acceptEncoding.length() != 0) {
@@ -275,7 +305,7 @@ public class HttpServerHandler extends IoHandlerAdapter {
             }
         }
 
-        HashMap<String, String> headers = new HashMap<String, String>();
+        HashMap<String, String> headers = servletReponse != null ? servletReponse.getHeaders() : new HashMap<String, String>();
         if (contentType.length() > 0) {
             headers.put("Content-Type", contentType);
         }
@@ -285,7 +315,13 @@ public class HttpServerHandler extends IoHandlerAdapter {
         } else {
             headers.put("Content-Length", String.valueOf(Utils.getContentLenth(content)));
         }
-        DefaultHttpResponse response = new DefaultHttpResponse(HttpVersion.HTTP_1_1, HttpStatus.SUCCESS_OK, headers);
+        addCrossOriginHeaders(request, headers);
+        DefaultHttpResponse response = null;
+        if (servletReponse != null) {
+            response = new DefaultHttpResponse(servletReponse.getProtocolVersion(), servletReponse.getStatus(), headers);
+        } else {
+        	response = new DefaultHttpResponse(HttpVersion.HTTP_1_1, HttpStatus.SUCCESS_OK, headers);
+        }
         session.write(response);
         if (buffer != null) {
             session.write(buffer).addListener(IoFutureListener.CLOSE);
@@ -295,16 +331,19 @@ public class HttpServerHandler extends IoHandlerAdapter {
     
     private void writeResponse(IoSession session, HttpRequest request, HttpServletResponse servletReponse) throws Exception {
         IoBuffer buffer = servletReponse.getBuffer();
-        HashMap<String, String> headers = new HashMap<String, String>();
-        headers.putAll(servletReponse.getHeaders());
+        HashMap<String, String> headers = servletReponse.getHeaders();
         if (buffer != null) {
             headers.put("Content-Length", String.valueOf(buffer.remaining()));
         }
-        HttpResponse response = new DefaultHttpResponse(HttpVersion.HTTP_1_1, HttpStatus.SUCCESS_OK, headers);
-        session.write(response);
-        if (buffer != null) {
+        addCrossOriginHeaders(request, headers);
+        DefaultHttpResponse response = new DefaultHttpResponse(servletReponse.getProtocolVersion(), servletReponse.getStatus(), headers);
+        if (buffer != null && buffer.remaining() > 0) {
+            session.write(response);
             session.write(buffer).addListener(IoFutureListener.CLOSE);
+        } else {
+            session.write(response).addListener(IoFutureListener.CLOSE);
         }
+        writeLog(session, request, response, null);
     }
     
     private boolean containsMethod(HttpMethod[] methods, HttpMethod method) {
@@ -323,6 +362,17 @@ public class HttpServerHandler extends IoHandlerAdapter {
         requestPath = Utils.decodeURLString(requestPath);
         
         Method foundRestMethod = mRestControllerMethodMap.get(requestPath);
+        if (foundRestMethod == null) {
+            for (Map.Entry<String, Method> entry : mRestControllerMethodMap.entrySet()) {
+                String key = entry.getKey();
+                if (key.startsWith("^") && key.endsWith("$")) {
+                    Matcher requestPathMatcher = Pattern.compile(key).matcher(requestPath);
+                    if (requestPathMatcher.find()) {
+                    	foundRestMethod = entry.getValue();
+                    }
+                }
+            }
+        }
         if (foundRestMethod != null) {
             RequestMapping rm = foundRestMethod.getAnnotation(RequestMapping.class);
             if (rm == null) {
@@ -347,7 +397,7 @@ public class HttpServerHandler extends IoHandlerAdapter {
                 controller.setSession(session);
                 controller.setParameters(allParameters);
 
-                JSONObject reqObj = controller.onRequest(foundRestMethod, requestPath);
+                JSONObject reqObj = controller.onRequest(foundRestMethod, requestPath, null);
                 if (!reqObj.isEmpty()) {
                     result = reqObj;
                 } else {
@@ -380,11 +430,11 @@ public class HttpServerHandler extends IoHandlerAdapter {
             if (result instanceof JSONObject) {
                 JSONObject resultObject = (JSONObject)result;
                 String resultStr = resultObject.toJSONString();
-                writeResponse(session, request, resultStr, "application/json;charset=utf-8");
+                writeResponse(session, request, resultStr, "application/json;charset=utf-8", servletReponse);
                 return;
             } else if (result instanceof String) {
                 String resultStr = (String)result;
-                writeResponse(session, request, resultStr, "text/html;charset=utf-8");
+                writeResponse(session, request, resultStr, "text/html;charset=utf-8", servletReponse);
                 return;
             }
         }
@@ -396,13 +446,13 @@ public class HttpServerHandler extends IoHandlerAdapter {
         Method foundMethod = mControllerMethodMap.get(requestPath);
         if (foundMethod == null && !staticFileExist) {
             for (Map.Entry<String, Method> entry : mControllerMethodMap.entrySet()) {
-            	String key = entry.getKey();
-            	if (key.startsWith("^") && key.endsWith("$")) {
-            		Matcher requestPathMatcher = Pattern.compile(key).matcher(requestPath);
-            		if (requestPathMatcher.find()) {
-            			foundMethod = entry.getValue();
-            		}
-            	}
+                String key = entry.getKey();
+                if (key.startsWith("^") && key.endsWith("$")) {
+                    Matcher requestPathMatcher = Pattern.compile(key).matcher(requestPath);
+                    if (requestPathMatcher.find()) {
+                        foundMethod = entry.getValue();
+                    }
+                }
             }
         }
         if (foundMethod != null) {
@@ -421,7 +471,7 @@ public class HttpServerHandler extends IoHandlerAdapter {
             controller.setParameters(allParameters);
             
             Object result = null;            
-            JSONObject reqObj = controller.onRequest(foundMethod, requestPath);
+            JSONObject reqObj = controller.onRequest(foundMethod, requestPath, model);
             if (!reqObj.isEmpty()) {
                 String login_url = Constants.Config.getString("server.login_url");
                 redirect(session, request, login_url, null);
@@ -440,7 +490,7 @@ public class HttpServerHandler extends IoHandlerAdapter {
                     String resultStr = (String)result;
                     ResponseBody rb = foundMethod.getAnnotation(ResponseBody.class);
                     if (rb != null) {
-                        writeResponse(session, request, resultStr, "text/html;charset=utf-8");
+                        writeResponse(session, request, resultStr, "text/html;charset=utf-8", servletReponse);
                         return;
                     } else {
                         String redirctPrefix = "redirect:";
@@ -454,15 +504,15 @@ public class HttpServerHandler extends IoHandlerAdapter {
                             File resTemplateFile = new File(localTemplateFilePath);
                             if (resTemplateFile.exists()) {
                                 StringWriter writer = new StringWriter();
-                            	try {
+                                try {
                                     Template template = mVelocityEngine.getTemplate(templateFile, "UTF-8");
                                     template.merge(model, writer);
-                            	} catch (Exception e) {
-                            		PrintWriter printWriter = new PrintWriter(writer);
-                            		e.printStackTrace(printWriter);
-                            	}
+                                } catch (Exception e) {
+                                    PrintWriter printWriter = new PrintWriter(writer);
+                                    e.printStackTrace(printWriter);
+                                }
                                 String resultString = writer.toString();
-                                writeResponse(session, request, resultString, "text/html;charset=utf-8");
+                                writeResponse(session, request, resultString, "text/html;charset=utf-8", servletReponse);
                                 return;
                             }
                         }
@@ -472,6 +522,29 @@ public class HttpServerHandler extends IoHandlerAdapter {
         }
         
         if (staticFileExist) {
+            boolean gzipEnabled = false;
+            String acceptEncoding = request.getHeader("accept-encoding");
+            if (acceptEncoding != null && acceptEncoding.length() != 0) {
+                String [] encodings = Utils.parseStringArray(acceptEncoding, ",");
+                for (String encoding : encodings) {
+                    if (encoding.trim().equals("gzip")) {
+                        gzipEnabled = true;
+                        break;
+                    }
+                }
+            }
+            
+            boolean isBigFile = resFile.length() > 4 * 1024 * 1024;
+            IoBuffer buffer = null;
+            if (!isBigFile) {
+                byte [] data = Utils.readFileToByteArray(resFile);
+                if (gzipEnabled) {
+                    buffer = IoBuffer.wrap(compress(data));
+                } else {
+                    buffer = IoBuffer.wrap(data);
+                }
+            }
+
             HashMap<String, String> headers = new HashMap<String, String>();
             String contentType = null;
             int iLastIndex = localFilePath.lastIndexOf('.');
@@ -507,14 +580,24 @@ public class HttpServerHandler extends IoHandlerAdapter {
                     }
                 }
             }
-            if (rangeStart != 0) {
+            if (mRangeSupport && rangeStart != 0) {
                 headers.put("Content-Length", String.valueOf(rangeEnd - rangeStart + 1));
             } else {
-                headers.put("Content-Length", String.valueOf(resFile.length()));
+                if (gzipEnabled && buffer != null) {
+                    headers.put("Content-Encoding", "gzip");
+                    headers.put("Content-Length", String.valueOf(buffer.remaining()));
+                } else {
+                    headers.put("Content-Length", String.valueOf(resFile.length()));
+                }
             }
             final long rangeStartBytes = rangeStart;
             headers.put("Last-Modified", Utils.formatTimeMSString(resFile.lastModified(), "EEE, dd MMM yyyy HH:mm:ss 'GMT'"));
             headers.put("ETag", Utils.HashToMD5Hex(localFilePath) + ":0");
+            String serverEnv = Constants.Config.getString("server.env");
+            if (serverEnv != null && serverEnv.equals("dev")) {
+                headers.put("Cache-Control", "no-cache");
+            }
+            addCrossOriginHeaders(request, headers);
 
             DefaultHttpResponse response = new DefaultHttpResponse(HttpVersion.HTTP_1_1, status, headers);
             session.write(response);
@@ -522,7 +605,7 @@ public class HttpServerHandler extends IoHandlerAdapter {
             
             // Use this for reading the data.
             session.setAttribute("BodyType", "byte[]");
-            if (resFile.length() > 4 * 1024 * 1024) {
+            if (isBigFile) {
                 mExecutor.schedule(new Runnable() {
                     @Override
                     public void run() {
@@ -554,16 +637,9 @@ public class HttpServerHandler extends IoHandlerAdapter {
                     }
                 }, 0, TimeUnit.SECONDS);
             } else {
-                byte[] buffer = new byte[(int) resFile.length()];
-                InputStream inputStream = new FileInputStream(resFile);
-                int nRead = 0;
-                while ((nRead = inputStream.read(buffer)) != -1) {
-                    if (nRead == 0) break;
-                    ByteBuffer outbuffer = ByteBuffer.wrap(buffer, 0, nRead);
-                    session.write(outbuffer);
+                if (buffer != null) {
+                    session.write(buffer).addListener(IoFutureListener.CLOSE);
                 }
-                inputStream.close();
-                session.close(false);
             }
         } else {
             pageNotFound(session, request);
@@ -617,7 +693,7 @@ public class HttpServerHandler extends IoHandlerAdapter {
         public IoBuffer content;
     };
     
-    public static List<MultipartFormData> parseMultipartFormData(String boundaryValue, IoBuffer content) {
+    public static List<MultipartFormData> parseMultipartFormData(String boundaryValue, IoBuffer content) throws UnsupportedEncodingException {
         String splitBoundaryValue = "--" + boundaryValue;
         byte [] boundaryBytes = splitBoundaryValue.getBytes();
         String dataBeginValue = "\r\n\r\n";
@@ -642,7 +718,7 @@ public class HttpServerHandler extends IoHandlerAdapter {
             } else {
                 if (boundaryPartBegin >= 0) {
                     if (byteEqual(dataBeginBytes, contentByteArray, iOffset, dataBeginBytes.length)) {
-                        multipartFormDataHeader = new String(contentByteArray, boundaryPartBegin, iOffset + dataBeginBytes.length - boundaryPartBegin);
+                        multipartFormDataHeader = new String(contentByteArray, boundaryPartBegin, iOffset + dataBeginBytes.length - boundaryPartBegin, "UTF-8");
                         iOffset += dataBeginBytes.length;
                         boundaryPartDataBegin = iOffset;
                         boundaryPartBegin = -1;
@@ -667,7 +743,7 @@ public class HttpServerHandler extends IoHandlerAdapter {
             if (content != null) {            
                 String boundaryValue = getMultipartBoundaryValue(request);
                 if (boundaryValue.length() > 0) {
-                	session.setAttribute(BODY_LOG, "[MULTIPART]" + boundaryValue);
+                    session.setAttribute(BODY_LOG, "[MULTIPART]" + boundaryValue);
                     List<MultipartFormData> multipartFormDatas = parseMultipartFormData(boundaryValue, content);
                     for (MultipartFormData formData : multipartFormDatas) {
                         HashMap<String, String> headers = Utils.parseURLParameters(formData.header, "\r\n", ":");
@@ -687,14 +763,17 @@ public class HttpServerHandler extends IoHandlerAdapter {
                     }
                 } else {
                     String postData = new String(content.array(), content.position(), content.remaining(), "UTF-8");
-                	session.setAttribute(BODY_LOG, "[BODY]" + postData);
+                    session.setAttribute(BODY_LOG, "[BODY]" + postData);
                     HashMap<String, List<String>> parameterMap = Utils.parseURLParametersEx(postData);
                     for (Entry<String, List<String>> entry : parameterMap.entrySet()) {
                         List<String> valueList = entry.getValue();
-                        if (valueList.size() == 1) {
-                            result.put(entry.getKey(), valueList.get(0));
+                        String key = entry.getKey();
+                        if (key.endsWith("[]")) {
+                            result.put(key.substring(0, key.length() - 2), valueList);
+                        } else if (key.endsWith("%5B%5D")) {
+                            result.put(key.substring(0, key.length() - 6), valueList);
                         } else {
-                            result.put(entry.getKey(), valueList);
+                            result.put(entry.getKey(), valueList.get(0));
                         }
                     }
                 }
@@ -703,19 +782,30 @@ public class HttpServerHandler extends IoHandlerAdapter {
             Map<String, List<String>> paramters = request.getParameters();
             for (Entry<String, List<String>> entry : paramters.entrySet()) {
                 List<String> valueList = entry.getValue();
-                if (valueList.size() == 1) {
-                    result.put(entry.getKey(), valueList.get(0));
+                String key = entry.getKey();
+                if (key.endsWith("[]")) {
+                    result.put(key.substring(0, key.length() - 2), valueList);
                 } else {
-                    result.put(entry.getKey(), valueList);
+                    result.put(entry.getKey(), valueList.get(0));
                 }
             }
         }
         return result;
     }
     
+    private static String reg = "(?:')|(?:--)|(?:#)|(/\\*(?:.|[\\n\\r])*?\\*/)|" + "(\\b(select|update|and|or|delete|insert|trancate|char|into|substr|ascii|declare|exec|count|master|into|drop|execute)\\b)";
+    private static Pattern sqlPattern = Pattern.compile(reg, Pattern.CASE_INSENSITIVE);
+    private static boolean isSQLDefendValid(String str) {
+        if (sqlPattern.matcher(str).find()) {
+            LOGGER.error("检测到潜在的攻击串:" + str);
+            return false;
+        }
+        return true;
+    }
+
     public List<Object> getMethodParameters(Method method, IoSession session, HttpRequest request, HashMap<String, Object> allParameters, com.fenglinga.tinyspring.framework.Controller controller) throws Exception {
         StringBuilder sb = new StringBuilder();
-    	Parameter[] parameters = method.getParameters();
+        Parameter[] parameters = method.getParameters();
         List<Object> params = new ArrayList<Object>();
         for (int i = 0; i < parameters.length; i++) {
             Parameter parameter = parameters[i];
@@ -727,164 +817,210 @@ public class HttpServerHandler extends IoHandlerAdapter {
             String paramName = parameter.getName();
             Object pv = null;
             RequestBody rb = parameter.getAnnotation(RequestBody.class);
+            KeepOriginParameter kop = parameter.getAnnotation(KeepOriginParameter.class);
             if (rb != null) {
-            	IoBuffer content = (IoBuffer)session.getAttribute("Content");
-            	if (content != null) {
+                IoBuffer content = (IoBuffer)session.getAttribute("Content");
+                if (content != null) {
                     String postContent = new String(content.array(), content.position(), content.remaining(), "UTF-8");
-                	if (className.equals(String.class.getName())) {
-                		pv = postContent;
-                	} else if (className.equals(JSONObject.class.getName())) {
-                		pv = JSON.parseObject(postContent);
-                	} else if (className.equals(JSONArray.class.getName())) {
-                		pv = JSON.parseArray(postContent);
-    	            } else {
-    	            	ResolveParameterTypeResult rpt = controller.resolveParameterType(type, paramName, allParameters.get(paramName));
-    	            	if (rpt != null && rpt.resolved) {
-    	            		pv = rpt.value;
-    	            	} else {
-       		                throw new Exception(className + "类型字段" + paramName + "未处理");
-    	            	}
-                	}
-            	} else {
-            		if (rb.required()) {
-            			throw new Exception("必填@RequestBody " + className + " " + paramName + "不能为空");
-            		}
-            	}
+                    if (!isSQLDefendValid(postContent)) {
+                        throw new Exception("潜在的攻击请求");
+                    }
+                    if (className.equals(String.class.getName())) {
+                        pv = postContent;
+                    } else if (className.equals(JSONObject.class.getName())) {
+                        pv = JSON.parseObject(postContent);
+                    } else if (className.equals(JSONArray.class.getName())) {
+                        pv = JSON.parseArray(postContent);
+                    } else {
+                        ResolveParameterTypeResult rpt = controller.resolveParameterType(type, paramName, allParameters.get(paramName));
+                        if (rpt != null && rpt.resolved) {
+                            pv = rpt.value;
+                        } else {
+                               throw new Exception(className + "类型字段" + paramName + "未处理");
+                        }
+                    }
+                } else {
+                    if (rb.required()) {
+                        throw new Exception("必填@RequestBody " + className + " " + paramName + "不能为空");
+                    }
+                }
             } else {
-	            if (className.equals(VelocityContext.class.getName())) {
-	            	VelocityContext vc = new VelocityContext();
-	            	vc.put("application", Constants.Config);
-	            	pv = vc;
-	            } else if (className.equals(HttpServletResponse.class.getName())) {
-	                pv = new HttpServletResponse();
-	                session.setAttribute("Response", pv);
-	            } else if (className.equals(HttpRequest.class.getName())) {
-	                pv = request;
-	            } else if (className.equals(HttpServerHandler.class.getName())) {
-	                pv = this;
-	            } else if (className.equals(IoSession.class.getName())) {
-	                pv = session;
-	            } else if (className.equals(MultipartFile.class.getName())) {
-	                pv = allParameters.get(paramName);
-	            } else if (className.equals(IoBuffer.class.getName())) {
-	                IoBuffer content = (IoBuffer)session.getAttribute("Content");
-	                pv = content;
-	            } else if (className.equals(boolean.class.getName())) {
-	                pv = allParameters.get(paramName);
-	                if (pv == null) {
-	                    throw new Exception("必填" + className + "类型字段" + paramName + "不能为空");
-	                }
-	                pv = Boolean.valueOf(String.valueOf(pv));
-	            } else if (className.equals(byte.class.getName())) {
-	                pv = allParameters.get(paramName);
-	                if (pv == null) {
-	                    throw new Exception("必填" + className + "类型字段" + paramName + "不能为空");
-	                }
-	                pv = Byte.valueOf(String.valueOf(pv));
-	            } else if (className.equals(char.class.getName())) {
-	                pv = allParameters.get(paramName);
-	                if (pv == null) {
-	                    throw new Exception("必填" + className + "类型字段" + paramName + "不能为空");
-	                }
-	                pv = (char)(int)Integer.valueOf(String.valueOf(pv));
-	            } else if (className.equals(short.class.getName())) {
-	                pv = allParameters.get(paramName);
-	                if (pv == null) {
-	                    throw new Exception("必填" + className + "类型字段" + paramName + "不能为空");
-	                }
-	                pv = Short.valueOf(String.valueOf(pv));
-	            } else if (className.equals(int.class.getName())) {
-	                pv = allParameters.get(paramName);
-	                if (pv == null) {
-	                    throw new Exception("必填" + className + "类型字段" + paramName + "不能为空");
-	                }
-	                pv = Integer.valueOf(String.valueOf(pv));
-	            } else if (className.equals(long.class.getName())) {
-	                pv = allParameters.get(paramName);
-	                if (pv == null) {
-	                    throw new Exception("必填" + className + "类型字段" + paramName + "不能为空");
-	                }
-	                pv = Long.valueOf(String.valueOf(pv));
-	            } else if (className.equals(float.class.getName())) {
-	                pv = allParameters.get(paramName);
-	                if (pv == null) {
-	                    throw new Exception("必填" + className + "类型字段" + paramName + "不能为空");
-	                }
-	                pv = Float.valueOf(String.valueOf(pv));
-	            } else if (className.equals(double.class.getName())) {
-	                pv = allParameters.get(paramName);
-	                if (pv == null) {
-	                    throw new Exception("必填" + className + "类型字段" + paramName + "不能为空");
-	                }
-	                pv = Double.valueOf(String.valueOf(pv));
-	            } else if (className.equals(String.class.getName())) {
-	                pv = allParameters.get(paramName);
-	                if (pv != null) {
-	                    pv = Utils.decodeURLString((String)pv);
-	                }
-	            } else if (className.equals(Byte.class.getName())) {
-	                String obj = (String)allParameters.get(paramName);
-	                if (obj != null && obj.length() > 0) {
-	                    pv = Byte.valueOf(obj);
-	                } else {
-	                	pv = null;
-	                }
-	            } else if (className.equals(Character.class.getName())) {
-	                String obj = (String)allParameters.get(paramName);
-	                if (obj != null && obj.length() > 0) {
-	                    pv = new Character((char)Integer.valueOf(obj).intValue());
-	                } else {
-	                	pv = null;
-	                }
-	            } else if (className.equals(Boolean.class.getName())) {
-	                String obj = (String)allParameters.get(paramName);
-	                if (obj != null && obj.length() > 0) {
-	                    pv = Boolean.valueOf(obj);
-	                } else {
-	                	pv = null;
-	                }
-	            } else if (className.equals(Short.class.getName())) {
-	                String obj = (String)allParameters.get(paramName);
-	                if (obj != null && obj.length() > 0) {
-	                    pv = Short.valueOf(obj);
-	                } else {
-	                	pv = null;
-	                }
-	            } else if (className.equals(Integer.class.getName())) {
-	                String obj = (String)allParameters.get(paramName);
-	                if (obj != null && obj.length() > 0) {
-	                    pv = Integer.valueOf(obj);
-	                } else {
-	                	pv = null;
-	                }
-	            } else if (className.equals(Long.class.getName())) {
-	                String obj = (String)allParameters.get(paramName);
-	                if (obj != null && obj.length() > 0) {
-	                    pv = Long.valueOf(obj);
-	                } else {
-	                	pv = null;
-	                }
-	            } else if (className.equals(Double.class.getName())) {
-	                String obj = (String)allParameters.get(paramName);
-	                if (obj != null && obj.length() > 0) {
-	                    pv = Double.valueOf(obj);
-	                } else {
-	                	pv = null;
-	                }
-	            } else {
-	            	ResolveParameterTypeResult rpt = controller.resolveParameterType(type, paramName, allParameters.get(paramName));
-	            	if (rpt != null && rpt.resolved) {
-	            		pv = rpt.value;
-	            	} else {
-   		                throw new Exception(className + "类型字段" + paramName + "未处理");
-	            	}
-	            }
+                if (className.equals(VelocityContext.class.getName())) {
+                    VelocityContext vc = new VelocityContext();
+                    vc.put("application", Constants.Config);
+                    vc.put("request", request);
+                    vc.put("date", new Date());
+                    pv = vc;
+                } else if (className.equals(HttpServletResponse.class.getName())) {
+                    pv = new HttpServletResponse();
+                    session.setAttribute("Response", pv);
+                } else if (className.equals(HttpRequest.class.getName())) {
+                    pv = request;
+                } else if (className.equals(HttpServerHandler.class.getName())) {
+                    pv = this;
+                } else if (className.equals(IoSession.class.getName())) {
+                    pv = session;
+                } else if (className.equals(MultipartFile.class.getName())) {
+                    pv = allParameters.get(paramName);
+                } else if (className.equals(IoBuffer.class.getName())) {
+                    IoBuffer content = (IoBuffer)session.getAttribute("Content");
+                    pv = content;
+                } else if (className.equals(boolean.class.getName())) {
+                    pv = allParameters.get(paramName);
+                    if (pv == null) {
+                        throw new Exception("必填" + className + "类型字段" + paramName + "不能为空");
+                    }
+                    pv = Boolean.valueOf(String.valueOf(pv));
+                } else if (className.equals(byte.class.getName())) {
+                    pv = allParameters.get(paramName);
+                    if (pv == null) {
+                        throw new Exception("必填" + className + "类型字段" + paramName + "不能为空");
+                    }
+                    pv = Byte.valueOf(String.valueOf(pv));
+                } else if (className.equals(char.class.getName())) {
+                    pv = allParameters.get(paramName);
+                    if (pv == null) {
+                        throw new Exception("必填" + className + "类型字段" + paramName + "不能为空");
+                    }
+                    pv = (char)(int)Integer.valueOf(String.valueOf(pv));
+                } else if (className.equals(short.class.getName())) {
+                    pv = allParameters.get(paramName);
+                    if (pv == null) {
+                        throw new Exception("必填" + className + "类型字段" + paramName + "不能为空");
+                    }
+                    pv = Short.valueOf(String.valueOf(pv));
+                } else if (className.equals(int.class.getName())) {
+                    pv = allParameters.get(paramName);
+                    if (pv == null) {
+                        throw new Exception("必填" + className + "类型字段" + paramName + "不能为空");
+                    }
+                    pv = Integer.valueOf(String.valueOf(pv));
+                } else if (className.equals(long.class.getName())) {
+                    pv = allParameters.get(paramName);
+                    if (pv == null) {
+                        throw new Exception("必填" + className + "类型字段" + paramName + "不能为空");
+                    }
+                    pv = Long.valueOf(String.valueOf(pv));
+                } else if (className.equals(float.class.getName())) {
+                    pv = allParameters.get(paramName);
+                    if (pv == null) {
+                        throw new Exception("必填" + className + "类型字段" + paramName + "不能为空");
+                    }
+                    pv = Float.valueOf(String.valueOf(pv));
+                } else if (className.equals(double.class.getName())) {
+                    pv = allParameters.get(paramName);
+                    if (pv == null) {
+                        throw new Exception("必填" + className + "类型字段" + paramName + "不能为空");
+                    }
+                    pv = Double.valueOf(String.valueOf(pv));
+                } else if (className.equals(String.class.getName())) {
+                    pv = allParameters.get(paramName);
+                    if (pv != null) {
+                    	if (kop != null) {
+                            pv = (String)pv;
+                            if (!isSQLDefendValid((String)pv)) {
+                                throw new Exception("潜在的攻击请求");
+                            }
+                    	} else {
+                            pv = Utils.decodeURLString((String)pv);
+                            if (!isSQLDefendValid((String)pv)) {
+                                throw new Exception("潜在的攻击请求");
+                            }
+                    	}
+                    }
+                } else if (className.equals(Byte.class.getName())) {
+                    String obj = (String)allParameters.get(paramName);
+                    if (obj != null && obj.length() > 0) {
+                        pv = Byte.valueOf(obj);
+                    } else {
+                        pv = null;
+                    }
+                } else if (className.equals(Character.class.getName())) {
+                    String obj = (String)allParameters.get(paramName);
+                    if (obj != null && obj.length() > 0) {
+                        pv = new Character((char)Integer.valueOf(obj).intValue());
+                    } else {
+                        pv = null;
+                    }
+                } else if (className.equals(Boolean.class.getName())) {
+                    String obj = (String)allParameters.get(paramName);
+                    if (obj != null && obj.length() > 0) {
+                        pv = Boolean.valueOf(obj);
+                    } else {
+                        pv = null;
+                    }
+                } else if (className.equals(Short.class.getName())) {
+                    String obj = (String)allParameters.get(paramName);
+                    if (obj != null && obj.length() > 0) {
+                        pv = Short.valueOf(obj);
+                    } else {
+                        pv = null;
+                    }
+                } else if (className.equals(Integer.class.getName())) {
+                    String obj = (String)allParameters.get(paramName);
+                    if (obj != null && obj.length() > 0) {
+                        pv = Integer.valueOf(obj);
+                    } else {
+                        pv = null;
+                    }
+                } else if (className.equals(Long.class.getName())) {
+                    String obj = (String)allParameters.get(paramName);
+                    if (obj != null && obj.length() > 0) {
+                        pv = Long.valueOf(obj);
+                    } else {
+                        pv = null;
+                    }
+                } else if (className.equals(Double.class.getName())) {
+                    String obj = (String)allParameters.get(paramName);
+                    if (obj != null && obj.length() > 0) {
+                        pv = Double.valueOf(obj);
+                    } else {
+                        pv = null;
+                    }
+                } else if (className.equals(String[].class.getName())) {
+                    Object obj = allParameters.get(paramName);
+                    if (obj != null && obj instanceof List<?>) {
+                        List<?> list = (List<?>)obj;
+                        String [] array = list.toArray(new String[0]);
+                        for (int j = 0; j < array.length; j++) {
+                            String item = array[j];
+                            if (kop != null) {
+                                if (!isSQLDefendValid(item)) {
+                                    throw new Exception("潜在的攻击请求");
+                                }
+                            } else {
+                                item = Utils.decodeURLString(item);
+                                if (!isSQLDefendValid(item)) {
+                                    throw new Exception("潜在的攻击请求");
+                                }
+                                array[j] = item;
+                            }
+                        }
+                        pv = array;
+                    }
+                } else {
+                    ResolveParameterTypeResult rpt = controller.resolveParameterType(type, paramName, allParameters.get(paramName));
+                    if (rpt != null && rpt.resolved) {
+                        pv = rpt.value;
+                    } else {
+                           throw new Exception(className + "类型字段" + paramName + "未处理");
+                    }
+                }
             }
-            sb.append("[PARAM](" + className + ")" + paramName + "=>[" + (pv instanceof HttpRequest ? ("HttpRequest@" + Integer.toHexString(pv.hashCode())) : String.valueOf(pv))).append("]\r\n");
+            sb.append("[PARAM](" + className + ")" + paramName + "=>[" + objectToString(pv)).append("]\r\n");
             params.add(pv);
         }
         session.setAttribute(PARSE_PARAMETER_LOG, sb.toString().trim());
         return params;
+    }
+    
+    private String objectToString(Object pv) {
+        if (pv instanceof HttpRequest) {
+            return "HttpRequest@" + Integer.toHexString(pv.hashCode());
+        } else if (pv instanceof String[]) {
+            return Utils.buildStringArray((String[])pv, ",");
+        }
+        return String.valueOf(pv);
     }
     
     @SuppressWarnings("unchecked")
@@ -908,6 +1044,7 @@ public class HttpServerHandler extends IoHandlerAdapter {
         if (message instanceof HttpRequest) {
             HttpRequest request = (HttpRequest) message;
             session.setAttribute("HttpRequest", request);
+            session.setAttribute(REQUEST_ENTER_TIME, Utils.getMSTime());
 
             // LOGGER.info(request.toString());
             if (request.getMethod() == HttpMethod.GET) {
@@ -950,12 +1087,12 @@ public class HttpServerHandler extends IoHandlerAdapter {
 
     @Override
     public void sessionClosed(IoSession session) throws Exception {
-    	//if (LOG_ENABLED) LOGGER.debug("CLOSED:" + this + "  Session: " + session);
+        //if (LOG_ENABLED) LOGGER.debug("CLOSED:" + this + "  Session: " + session);
     }
 
     @Override
     public void sessionIdle(IoSession session, IdleStatus status) {
-    	//if (LOG_ENABLED) LOGGER.debug("*** IDLE #" + session.getIdleCount(IdleStatus.BOTH_IDLE) + " ***");
+        //if (LOG_ENABLED) LOGGER.debug("*** IDLE #" + session.getIdleCount(IdleStatus.BOTH_IDLE) + " ***");
         session.close(true);
     }
 
