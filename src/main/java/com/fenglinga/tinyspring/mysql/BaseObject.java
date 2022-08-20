@@ -5,9 +5,8 @@ import java.io.IOException;
 import java.util.UUID;
 import java.util.regex.Pattern;
 
-import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang3.StringUtils;
 
-import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONArray;
 import com.alibaba.fastjson.JSONObject;
 import com.fenglinga.tinyspring.common.Utils;
@@ -123,6 +122,26 @@ public class BaseObject {
         return result;
     }
     
+    /** 数组交集 */
+    public static JSONArray array_intersect(JSONArray a1, JSONArray a2) {
+        JSONArray result = new JSONArray();
+        for (int i = 0; i < a1.size(); i++) {
+            String v = a1.getString(i);
+            boolean exist = false;
+            for (int j = 0; j < a2.size(); j++) {
+                String vv = a2.getString(j);
+                if (vv.equals(v)) {
+                    exist = true;
+                    break;
+                }
+            }
+            if (exist) {
+                result.add(v);
+            }
+        }
+        return result;
+    }
+
     /** 数组取唯一 */
     public static JSONArray array_unique(JSONArray a1) {
         JSONArray result = new JSONArray();
@@ -237,7 +256,8 @@ public class BaseObject {
     /** 判断元素是否在数组中存在 */
     public static boolean in_array(Object needle, JSONArray haystack) {
         for (int i = 0; i < haystack.size(); i++) {
-            if (haystack.get(i).equals(needle)) {
+        	String v = haystack.getString(i);
+            if (v.equals(needle)) {
                 return true;
             }
         }
@@ -322,15 +342,6 @@ public class BaseObject {
     /** 判断对象类型 */
     public static Object judgeObject(Object obj) {
         if (obj == null) return obj;
-        if (obj instanceof String) {
-            String str = (String)obj;
-            if (str.startsWith("{") && str.endsWith("}")) {
-                return JSON.parseObject(str);
-            }
-            if (str.startsWith("[") && str.endsWith("]")) {
-                return JSON.parseArray(str);
-            }
-        }
         return obj;
     }
     

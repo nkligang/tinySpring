@@ -98,6 +98,9 @@ public class Query extends BaseObject {
     
     public String getFieldByAsName(String asName) {
     	JSONArray fieldResult = this.options.getJSONArray("field");
+    	if (fieldResult == null) {
+    		return null;
+    	}
     	for (int i = 0; i < fieldResult.size(); i++) {
     		String fieldStr = fieldResult.getString(i);
     		String [] parts = fieldStr.split("as");

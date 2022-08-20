@@ -228,6 +228,7 @@ public class Connection extends BaseObject {
         if (!empty(config.getString("charset"))) {
             dsn.append("&useUnicode=true").append("&characterEncoding=").append(config.getString("charset"));
         }
+        dsn.append("&useOldAliasMetadataBehavior=true");
         return dsn.toString();
     }
     
@@ -244,13 +245,37 @@ public class Connection extends BaseObject {
             JSONObject obj = result.getJSONObject(i);
             obj = array_change_key_case(obj, true);
             JSONObject info = new JSONObject();
-            info.put("name", obj.getString("field"));
-            info.put("type", obj.getString("type"));
-            info.put("notnull", obj.getString("null").equals("NO"));
+            boolean isNull = false;
+            if (obj.containsKey("null")) {
+                isNull = obj.getString("null").equals("NO");
+            } else if (obj.containsKey("is_nullable")) {
+                isNull = obj.getString("is_nullable").equals("NO");
+            }
+            boolean isPrimary = false;
+            if (obj.containsKey("key")) {
+                isPrimary = obj.getString("key").toLowerCase().equals("pri");
+            } else if (obj.containsKey("column_key")) {
+                isPrimary = obj.getString("column_key").toLowerCase().equals("pri");
+            }
+            String type = null;
+            if (obj.containsKey("type")) {
+                type = obj.getString("type");
+            } else if (obj.containsKey("column_type")) {
+                type = obj.getString("column_type");
+            }
+            String name = null;
+            if (obj.containsKey("field")) {
+                name = obj.getString("field");
+            } else if (obj.containsKey("column_name")) {
+                name = obj.getString("column_name");
+            }
+            info.put("name", name);
+            info.put("type", type);
+            info.put("notnull", isNull);
             info.put("default", obj.getString("default"));
-            info.put("primary", obj.getString("key").toLowerCase().equals("pri"));
+            info.put("primary", isPrimary);
             info.put("autoinc", obj.getString("extra").toLowerCase().equals("auto_increment"));
-            fields.put(obj.getString("field"), info);
+            fields.put(name, info);
         }
         return fields;
     }

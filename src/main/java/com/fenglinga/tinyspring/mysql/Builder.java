@@ -285,7 +285,7 @@ public class Builder extends BaseObject {
                 this.query.bind(bind);
                 zone = implode(",", array);
             } else {
-                zone = implode(",", (JSONArray)this.parseValue(value, field));
+                zone = implode(",", (JSONArray)this.parseValue(((JSONArray)value).clone(), field));
             }
             whereStr += key + " " + exp + " (" + (empty(zone) ? "''" : zone) + ")";
         } else if (in_array((String)exp, new String[] {"NOT BETWEEN", "BETWEEN"})) {

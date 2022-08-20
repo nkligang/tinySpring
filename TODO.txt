@@ -1,0 +1,10 @@
+支持以下形式
+Db.name("question").field("max(sequence) as max_sequence").where("survey_id", survey_id).value("max_sequence");
+Db.name("question").where("survey_id", survey_id).where("sequence", ">", 1).where("sequence", "<", 5).select();
+
+如果字符串里面包含特殊字符如'，则会导致错误，如果包含注释就可能会有sql注入的问题
+
+大文件的上传
+
+文档可以放在类似于这样的域名里面
+https://libexpat.github.io/

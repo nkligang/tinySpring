@@ -11,9 +11,11 @@ import java.io.StringWriter;
 import java.io.UnsupportedEncodingException;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.lang.reflect.Parameter;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
@@ -63,6 +65,7 @@ import com.fenglinga.tinyspring.framework.annotation.ResponseBody;
 import com.fenglinga.tinyspring.framework.annotation.RestController;
 import com.fenglinga.tinyspring.framework.annotation.Transactional;
 import com.fenglinga.tinyspring.mysql.Db;
+import org.objectweb.asm.*;
 
 public class HttpServerHandler extends IoHandlerAdapter {
     private final static Logger LOGGER = LoggerFactory.getLogger(HttpServerHandler.class);
@@ -392,7 +395,7 @@ public class HttpServerHandler extends IoHandlerAdapter {
                 }
                 
                 HashMap<String, Object> allParameters = parseAllParameters(session, request);
-                List<Object> params = getMethodParameters(foundRestMethod, session, request, allParameters, controller);
+                List<Object> params = getMethodParameters(klass, foundRestMethod, session, request, allParameters, controller);
                 controller.setRequest(request);
                 controller.setSession(session);
                 controller.setParameters(allParameters);
@@ -466,7 +469,7 @@ public class HttpServerHandler extends IoHandlerAdapter {
             controller.setSession(session);
 
             HashMap<String, Object> allParameters = parseAllParameters(session, request);
-            List<Object> params = getMethodParameters(foundMethod, session, request, allParameters, controller);
+            List<Object> params = getMethodParameters(klass, foundMethod, session, request, allParameters, controller);
             VelocityContext model = findMethodParameter(params, VelocityContext.class, true);
             controller.setParameters(allParameters);
             
@@ -803,18 +806,70 @@ public class HttpServerHandler extends IoHandlerAdapter {
         return true;
     }
 
-    public List<Object> getMethodParameters(Method method, IoSession session, HttpRequest request, HashMap<String, Object> allParameters, com.fenglinga.tinyspring.framework.Controller controller) throws Exception {
+    /**
+     * 获取指定类指定方法的参数名
+     *
+     * @param clazz 要获取参数名的方法所属的类
+     * @param method 要获取参数名的方法
+     * @return 按参数顺序排列的参数名列表，如果没有参数，则返回null
+     */
+    public static String[] getMethodParameterNamesByAsm(Class<?> clazz, final Method method) {
+        final Class<?>[] parameterTypes = method.getParameterTypes();
+        if (parameterTypes == null || parameterTypes.length == 0) {
+            return null;
+        }
+        final Type[] types = new Type[parameterTypes.length];
+        for (int i = 0; i < parameterTypes.length; i++) {
+            types[i] = Type.getType(parameterTypes[i]);
+        }
+        final String[] parameterNames = new String[parameterTypes.length];
+
+        String className = clazz.getName();
+        int lastDotIndex = className.lastIndexOf(".");
+        className = className.substring(lastDotIndex + 1) + ".class";
+        InputStream is = clazz.getResourceAsStream(className);
+        try {
+            ClassReader classReader = new ClassReader(is);
+            classReader.accept(new ClassVisitor(Opcodes.ASM5) {
+                @Override
+                public MethodVisitor visitMethod(int access, String name, String desc, String signature,
+                                                 String[] exceptions) {
+                    // 只处理指定的方法  
+                    Type[] argumentTypes = Type.getArgumentTypes(desc);
+                    if (!method.getName().equals(name) || !Arrays.equals(argumentTypes, types)) {
+                        return null;
+                    }
+                    return new MethodVisitor(Opcodes.ASM5) {
+                        @Override
+                        public void visitLocalVariable(String name, String desc, String signature, Label start,
+                                                       Label end, int index) {
+                            // 静态方法第一个参数就是方法的参数，如果是实例方法，第一个参数是this  
+                            if (Modifier.isStatic(method.getModifiers())) {
+                                parameterNames[index] = name;
+                            } else if (index > 0 && index <= parameterNames.length) {
+                                parameterNames[index - 1] = name;
+                            }
+                        }
+                    };
+
+                }
+            }, 0);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        return parameterNames;
+    }
+    
+    public List<Object> getMethodParameters(Class<?> clazz, Method method, IoSession session, HttpRequest request, HashMap<String, Object> allParameters, com.fenglinga.tinyspring.framework.Controller controller) throws Exception {
         StringBuilder sb = new StringBuilder();
+        String[] paramNames = getMethodParameterNamesByAsm(clazz, method);
         Parameter[] parameters = method.getParameters();
         List<Object> params = new ArrayList<Object>();
-        for (int i = 0; i < parameters.length; i++) {
+        for (int i = 0; i < parameters.length && i < paramNames.length; i++) {
             Parameter parameter = parameters[i];
-            if (parameter.getName().startsWith("arg")) {
-                throw new Exception("Unsupport java version");
-            }
+            String paramName = paramNames[i];
             Class<?> type = parameter.getType();
             String className = type.getName();
-            String paramName = parameter.getName();
             Object pv = null;
             RequestBody rb = parameter.getAnnotation(RequestBody.class);
             KeepOriginParameter kop = parameter.getAnnotation(KeepOriginParameter.class);
@@ -1050,6 +1105,8 @@ public class HttpServerHandler extends IoHandlerAdapter {
             if (request.getMethod() == HttpMethod.GET) {
                 handleRequest(session, request);
             } else if (request.getMethod() == HttpMethod.POST) {
+            } else if (request.getMethod() == HttpMethod.OPTIONS) {
+                writeResponse(session, request, "", "text/html;charset=utf-8", null);
             } else {
                 session.close(true);
             }

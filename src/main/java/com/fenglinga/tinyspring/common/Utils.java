@@ -1120,8 +1120,12 @@ public final class Utils {
         System.out.println("Context path: " + contextPath);
         return contextPath;
     }
-
+    
     public static String LoadStringFromFile(String file) {
+    	return LoadStringFromFile(file, "UTF-8");
+    }
+    
+    public static String LoadStringFromFile(String file, String charsetName) {
         InputStream inputStream = null;
         try {
             File resFile = new File(file);
@@ -1133,7 +1137,7 @@ public final class Utils {
             InputStreamReader reader = null;
             BufferedReader br = null;
 
-            reader = new InputStreamReader(inputStream, "UTF-8");
+            reader = new InputStreamReader(inputStream, charsetName);
             br = new BufferedReader(reader);
             StringBuilder sb = new StringBuilder();
             String line = null;
@@ -1185,15 +1189,19 @@ public final class Utils {
             }
         }
     }
-
+    
     public static boolean SaveStringToFile(String file, String content) {
+    	return SaveStringToFile(file, content, "UTF-8");
+    }
+    
+    public static boolean SaveStringToFile(String file, String content, String charsetName) {
         File targetFile = new File(file);
         if (!targetFile.getParentFile().exists()) {
             targetFile.getParentFile().mkdirs();
         }
         Writer out = null;
         try {
-            out = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(targetFile), "UTF-8"));
+            out = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(targetFile), charsetName));
             out.write(content);
             System.out.println("save file: " + targetFile.getCanonicalPath());
         } catch (IOException e) {
