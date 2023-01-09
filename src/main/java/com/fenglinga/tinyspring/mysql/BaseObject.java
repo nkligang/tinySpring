@@ -193,6 +193,27 @@ public class BaseObject {
         return result;
     }
     
+    public static JSONArray array_column(JSONArray array, String field, Class<?> valueType) {
+        JSONArray result = new JSONArray();
+        for (int i = 0; i < array.size(); i++) {
+            JSONObject obj = array.getJSONObject(i);
+            if (valueType == null) {
+                result.add(obj.get(field));
+            } else {
+                if (valueType.getName().equals("java.lang.String")) {
+                    result.add(obj.getString(field));
+                } else if (valueType.getName().equals("java.lang.Integer")) {
+                    result.add(obj.getInteger(field));
+                } else if (valueType.getName().equals("java.lang.Long")) {
+                    result.add(obj.getLong(field));
+                } else {
+                	result.add(obj.get(field));
+                }
+            }
+        }
+        return result;
+    }
+
     /** 数组中的关键词修改大小写 */
     public static JSONObject array_change_key_case(JSONObject obj, boolean lowerCase) {
         JSONObject result = new JSONObject();
@@ -228,10 +249,10 @@ public class BaseObject {
                 }
             }
             if (!exist) {
-                ret.add(s1);
+                ret.add(array1.get(i));
             }
         }
-        return array1;
+        return ret;
     }
     
     public static String array_search(Object needle, JSONObject obj) {

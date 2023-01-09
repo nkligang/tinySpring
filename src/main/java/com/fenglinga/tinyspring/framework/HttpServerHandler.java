@@ -52,6 +52,7 @@ import org.slf4j.LoggerFactory;
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONArray;
 import com.alibaba.fastjson.JSONObject;
+import com.alibaba.fastjson.serializer.SerializerFeature;
 import com.fenglinga.tinyspring.common.Constants;
 import com.fenglinga.tinyspring.common.Utils;
 import com.fenglinga.tinyspring.framework.Controller.ResolveParameterTypeResult;
@@ -82,6 +83,9 @@ public class HttpServerHandler extends IoHandlerAdapter {
     private static final String BODY_LOG = "body.log";
     private static final String PARSE_PARAMETER_LOG = "parse.parameter.log";
     private static final String REQUEST_ENTER_TIME = "request.enter.time";
+    private static final int LOG_MAX_STRING_LENGTH = 512;
+    private static boolean mParameterNamesCacheEnabled = true;
+    protected static HashMap<Method, String []> mParameterNamesMap = new HashMap<Method, String []>();
     
     public HttpServerHandler() {
         // Images
@@ -134,9 +138,11 @@ public class HttpServerHandler extends IoHandlerAdapter {
                     for (String v : rm.value()) {
                         if (isRestController) {
                             mRestControllerMethodMap.put(v, method);
+                            cacheParameterNames(method);
                         }
                         if (isController) {
                             mControllerMethodMap.put(v, method);
+                            cacheParameterNames(method);
                         }
                     }
                 }
@@ -154,6 +160,27 @@ public class HttpServerHandler extends IoHandlerAdapter {
     
     public HashMap<String, Method> getControllerMethodMaps(boolean isRest) {
         return isRest ? mRestControllerMethodMap : mControllerMethodMap;
+    }
+    
+    private void cacheParameterNames(Method method) {
+    	if (!mParameterNamesCacheEnabled) {
+    		return;
+    	}
+    	String cachePath = Constants.AppAssetsPath + "parameter_names.cache";
+    	String fileContent = Utils.LoadStringFromFile(cachePath);
+    	JSONObject obj = fileContent != null ? JSON.parseObject(fileContent) : new JSONObject();
+        Class<?> klass = method.getDeclaringClass();
+        String key = klass.getName() + "." + method.getName();
+        try {
+            String[] paramNames = getMethodParameterNamesByAsm(klass, method);
+            mParameterNamesMap.put(method, paramNames);
+            obj.put(key, paramNames);
+            Utils.SaveStringToFile(cachePath, obj.toJSONString());
+        } catch (Exception e) {
+        	JSONArray array = obj.getJSONArray(key);
+        	String[] paramNames = array != null ? (String[])array.toArray(new String[array.size()]) : new String[] {};
+            mParameterNamesMap.put(method, paramNames);
+        }
     }
 
     public void onApplicationShutdown() {
@@ -207,19 +234,24 @@ public class HttpServerHandler extends IoHandlerAdapter {
         sb.append(" \"").append(request.getHeader("user-agent")).append("\"");
         String bodyLog = (String)session.getAttribute(BODY_LOG);
         if (bodyLog != null) {
-            sb.append("\r\n").append(bodyLog);
+            sb.append("\r\n");
+            if (bodyLog.length() > LOG_MAX_STRING_LENGTH) {
+                sb.append(bodyLog.substring(0, LOG_MAX_STRING_LENGTH)).append("...");
+            } else {
+                sb.append(bodyLog);
+            }
         }
         String parseParameterLog = (String)session.getAttribute(PARSE_PARAMETER_LOG);
         if (parseParameterLog != null) {
             sb.append("\r\n").append(parseParameterLog);
         }
         if (mRestControllerMethodMap.containsKey(request.getRequestPath()) && content != null) {
-        	sb.append("\r\n").append("[RESPONSE]");
-        	if (content.length() > 512) {
-            	sb.append(content.substring(0, 512)).append("...");
-        	} else {
-            	sb.append(content);
-        	}
+            sb.append("\r\n").append("[RESPONSE]");
+            if (content.length() > LOG_MAX_STRING_LENGTH) {
+                sb.append(content.substring(0, LOG_MAX_STRING_LENGTH)).append("...");
+            } else {
+                sb.append(content);
+            }
         }
         LOGGER.info(sb.toString());
     }
@@ -323,7 +355,7 @@ public class HttpServerHandler extends IoHandlerAdapter {
         if (servletReponse != null) {
             response = new DefaultHttpResponse(servletReponse.getProtocolVersion(), servletReponse.getStatus(), headers);
         } else {
-        	response = new DefaultHttpResponse(HttpVersion.HTTP_1_1, HttpStatus.SUCCESS_OK, headers);
+            response = new DefaultHttpResponse(HttpVersion.HTTP_1_1, HttpStatus.SUCCESS_OK, headers);
         }
         session.write(response);
         if (buffer != null) {
@@ -371,7 +403,7 @@ public class HttpServerHandler extends IoHandlerAdapter {
                 if (key.startsWith("^") && key.endsWith("$")) {
                     Matcher requestPathMatcher = Pattern.compile(key).matcher(requestPath);
                     if (requestPathMatcher.find()) {
-                    	foundRestMethod = entry.getValue();
+                        foundRestMethod = entry.getValue();
                     }
                 }
             }
@@ -432,7 +464,7 @@ public class HttpServerHandler extends IoHandlerAdapter {
             }
             if (result instanceof JSONObject) {
                 JSONObject resultObject = (JSONObject)result;
-                String resultStr = resultObject.toJSONString();
+                String resultStr = resultObject.toString(SerializerFeature.DisableCircularReferenceDetect);
                 writeResponse(session, request, resultStr, "application/json;charset=utf-8", servletReponse);
                 return;
             } else if (result instanceof String) {
@@ -860,9 +892,16 @@ public class HttpServerHandler extends IoHandlerAdapter {
         return parameterNames;
     }
     
+    public static String[] getMethodParameterNames(Method method) {
+    	if (!mParameterNamesCacheEnabled) {
+    		return getMethodParameterNamesByAsm(method.getDeclaringClass(), method);
+    	}
+    	return mParameterNamesMap.get(method);
+    }
+    
     public List<Object> getMethodParameters(Class<?> clazz, Method method, IoSession session, HttpRequest request, HashMap<String, Object> allParameters, com.fenglinga.tinyspring.framework.Controller controller) throws Exception {
         StringBuilder sb = new StringBuilder();
-        String[] paramNames = getMethodParameterNamesByAsm(clazz, method);
+        String[] paramNames = getMethodParameterNames(method);
         Parameter[] parameters = method.getParameters();
         List<Object> params = new ArrayList<Object>();
         for (int i = 0; i < parameters.length && i < paramNames.length; i++) {
@@ -971,17 +1010,17 @@ public class HttpServerHandler extends IoHandlerAdapter {
                 } else if (className.equals(String.class.getName())) {
                     pv = allParameters.get(paramName);
                     if (pv != null) {
-                    	if (kop != null) {
+                        if (kop != null) {
                             pv = (String)pv;
                             if (!isSQLDefendValid((String)pv)) {
                                 throw new Exception("潜在的攻击请求");
                             }
-                    	} else {
+                        } else {
                             pv = Utils.decodeURLString((String)pv);
                             if (!isSQLDefendValid((String)pv)) {
                                 throw new Exception("潜在的攻击请求");
                             }
-                    	}
+                        }
                     }
                 } else if (className.equals(Byte.class.getName())) {
                     String obj = (String)allParameters.get(paramName);
@@ -1062,7 +1101,14 @@ public class HttpServerHandler extends IoHandlerAdapter {
                     }
                 }
             }
-            sb.append("[PARAM](" + className + ")" + paramName + "=>[" + objectToString(pv)).append("]\r\n");
+            String paramValueLog = objectToString(pv);
+            sb.append("[PARAM](").append(className).append(")").append(paramName).append("=>[");
+            if (paramValueLog.length() > LOG_MAX_STRING_LENGTH) {
+                sb.append(paramValueLog.substring(0, LOG_MAX_STRING_LENGTH)).append("...");
+            } else {
+                sb.append(paramValueLog);
+            }
+            sb.append("]\r\n");
             params.add(pv);
         }
         session.setAttribute(PARSE_PARAMETER_LOG, sb.toString().trim());
@@ -1106,7 +1152,7 @@ public class HttpServerHandler extends IoHandlerAdapter {
                 handleRequest(session, request);
             } else if (request.getMethod() == HttpMethod.POST) {
             } else if (request.getMethod() == HttpMethod.OPTIONS) {
-                writeResponse(session, request, "", "text/html;charset=utf-8", null);
+                writeResponse(session, request, "OK", "text/html;charset=utf-8", null);
             } else {
                 session.close(true);
             }

@@ -1144,7 +1144,7 @@ public final class Utils {
             while ((line = br.readLine()) != null) {
                 sb.append(line).append("\r\n");
             }
-            System.out.println("load file: " + resFile.getCanonicalPath());
+            //System.out.println("load file: " + resFile.getCanonicalPath());
             return sb.toString();
         } catch (Exception e) {
             e.printStackTrace();
@@ -1203,7 +1203,7 @@ public final class Utils {
         try {
             out = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(targetFile), charsetName));
             out.write(content);
-            System.out.println("save file: " + targetFile.getCanonicalPath());
+            //System.out.println("save file: " + targetFile.getCanonicalPath());
         } catch (IOException e) {
             e.printStackTrace();
         } finally {
@@ -1600,13 +1600,23 @@ public final class Utils {
         public String inputString = "";
         public String errorString = "";
     };
-    public static CommandInfo executeCommand(String command)
-    {
-        try
-        {
-            CommandInfo info = new CommandInfo();
-            Runtime rt = Runtime.getRuntime();
-            Process proc = rt.exec(command);
+	public static CommandInfo executeCommand(String command)
+	{
+		return executeCommand(command, null);
+	}
+	
+	public static CommandInfo executeCommand(String command, String workPath)
+	{
+		try
+		{
+			CommandInfo info = new CommandInfo();
+			Runtime rt = Runtime.getRuntime();
+			Process proc = null;
+			if (workPath != null) {
+				proc = rt.exec(command, new String[]{""}, new File(workPath));
+			} else {
+				proc = rt.exec(command);
+			}
             System.out.println(command);
             {
                 InputStream stdin = proc.getInputStream();
@@ -1626,8 +1636,8 @@ public final class Utils {
                     info.errorString += line + "\n";
                 }
             }
-            if (info.inputString.length() > 0)
-                System.out.println(info.inputString);
+            //if (info.inputString.length() > 0)
+            //    System.out.println(info.inputString);
             if (info.errorString.length() > 0)
                 System.out.println(info.errorString);
             info.exitValue = proc.waitFor();

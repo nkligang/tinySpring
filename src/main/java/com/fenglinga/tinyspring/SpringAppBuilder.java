@@ -220,13 +220,9 @@ public class SpringAppBuilder {
 
     public boolean shutdown(float fDelay)
     {
-        if (mHandler != null) {
-            mHandler.onApplicationShutdown();
-        }
-        if (mAcceptor != null)  {
-            mAcceptor.unbind();
-            mAcceptor.dispose();
-        }
+        mShutdownEnabled = true;
+        mShutdownStartTime = System.currentTimeMillis();
+        mShutdownDelayTime = (long)(fDelay * 1000);
         return true;
     }
     

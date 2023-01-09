@@ -128,6 +128,14 @@ public class Builder extends BaseObject {
                     }
                 }
                 String tableStr = this.parseTable(table, options);
+                int begin = tableStr.indexOf("@think");
+                if (begin >= 0) {
+                	int end = tableStr.indexOf(" ", begin);
+                	if (end > 0) {
+                		String temp = tableStr.substring(begin, end);
+                		tableStr = tableStr.replace(temp, "");
+                	}
+                }
                 joinStr += ' ' + type + " JOIN " + tableStr + " ON " + implode(" AND ", condition);
             }
         }

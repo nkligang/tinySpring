@@ -8,3 +8,8 @@ Db.name("question").where("survey_id", survey_id).where("sequence", ">", 1).wher
 
 文档可以放在类似于这样的域名里面
 https://libexpat.github.io/
+
+通过Eclipse发布tinyspring的包时报如下错：需要查明具体原因
+java.lang.NoSuchMethodError: java.nio.ByteBuffer.position(I)Ljava/nio/ByteBuffer;
+
+使用mina2.2.1库存在OPTION请求无法得到响应的问题

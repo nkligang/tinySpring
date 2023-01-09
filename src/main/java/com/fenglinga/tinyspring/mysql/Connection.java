@@ -143,6 +143,9 @@ public class Connection extends BaseObject {
                     if (v instanceof java.sql.Timestamp) {
                         java.sql.Timestamp timestamp = (java.sql.Timestamp)v;
                         obj.put(rsmd.getColumnName(i), BaseObject.date("yyyy-MM-dd HH:mm:ss", timestamp.getTime()/1000));
+                    } else if (v instanceof java.time.LocalDateTime) {
+                    	java.time.LocalDateTime timestamp = (java.time.LocalDateTime)v;
+                        obj.put(rsmd.getColumnName(i), BaseObject.date("yyyy-MM-dd HH:mm:ss", java.sql.Timestamp.valueOf(timestamp).getTime()/1000));
                     } else {
                         obj.put(rsmd.getColumnName(i), v);
                     }
