@@ -40,7 +40,44 @@ public class Builder extends BaseObject {
     }
     
     protected String parseKey(String key, JSONObject options) {
-        return key;
+		int leftBrace = key.indexOf("(");
+		int rightBrace = key.indexOf(")", leftBrace);
+		if (leftBrace >= 0 && rightBrace >= 0 && rightBrace > leftBrace) {
+			String sub = key.substring(leftBrace + 1, rightBrace);
+			String ret = key.substring(0, leftBrace + 1) + parseKey(sub, options) + key.substring(rightBrace);
+            return ret;
+		}
+		int idx = key.indexOf(".");
+    	if (idx > 0) {
+        	String left = key.substring(0, idx);
+        	String right = key.substring(idx+1);
+        	if (!right.equals("*")) {
+        		boolean hasSpliter = false;
+        		String [] spliters = {" ", ",", "+"};
+        		for (String s : spliters) {
+            		int idxSpace = right.indexOf(s);
+            		if (idxSpace > 0) {
+                		String leftPart = right.substring(0, idxSpace);
+                    	String rightPart = right.substring(idxSpace+1);
+                    	right = parseKey(leftPart, options) + s + rightPart;
+                    	hasSpliter = true;
+                    	break;
+            		}
+        		}
+        		if (!hasSpliter) {
+        			right = "`" + right + "`";
+        		}
+        	}
+            String ret = left + "." + right;
+            return ret;
+    	}
+    	int idxSpace = key.indexOf(" ");
+    	if (idxSpace > 0 || key.equals("*")) {
+    		String ret = key;
+            return ret;
+    	}
+    	String ret = "`" + key + "`";
+        return ret;
     }
     
     protected String parseTable(Object tables, JSONObject options) {
@@ -133,6 +170,7 @@ public class Builder extends BaseObject {
                 	int end = tableStr.indexOf(" ", begin);
                 	if (end > 0) {
                 		String temp = tableStr.substring(begin, end);
+                		temp = temp.replace("`", "");
                 		tableStr = tableStr.replace(temp, "");
                 	}
                 }
@@ -359,7 +397,7 @@ public class Builder extends BaseObject {
         }
         if (info != null) {
             if (is_string(value)) {
-                int t = strtotime(value);
+                long t = strtotime(value);
                 value = String.valueOf(t > 0 ? t : value);
             }
 

@@ -46,6 +46,8 @@ import org.apache.velocity.Template;
 import org.apache.velocity.VelocityContext;
 import org.apache.velocity.app.Velocity;
 import org.apache.velocity.app.VelocityEngine;
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Element;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -58,14 +60,18 @@ import com.fenglinga.tinyspring.common.Utils;
 import com.fenglinga.tinyspring.framework.Controller.ResolveParameterTypeResult;
 import com.fenglinga.tinyspring.framework.annotation.AfterReturning;
 import com.fenglinga.tinyspring.framework.annotation.Aspect;
+import com.fenglinga.tinyspring.framework.annotation.Coding;
+import com.fenglinga.tinyspring.framework.annotation.CodingType;
 import com.fenglinga.tinyspring.framework.annotation.Controller;
 import com.fenglinga.tinyspring.framework.annotation.KeepOriginParameter;
 import com.fenglinga.tinyspring.framework.annotation.RequestBody;
 import com.fenglinga.tinyspring.framework.annotation.RequestMapping;
 import com.fenglinga.tinyspring.framework.annotation.ResponseBody;
 import com.fenglinga.tinyspring.framework.annotation.RestController;
+import com.fenglinga.tinyspring.framework.annotation.RichContent;
 import com.fenglinga.tinyspring.framework.annotation.Transactional;
 import com.fenglinga.tinyspring.mysql.Db;
+
 import org.objectweb.asm.*;
 
 public class HttpServerHandler extends IoHandlerAdapter {
@@ -83,6 +89,7 @@ public class HttpServerHandler extends IoHandlerAdapter {
     private static final String BODY_LOG = "body.log";
     private static final String PARSE_PARAMETER_LOG = "parse.parameter.log";
     private static final String REQUEST_ENTER_TIME = "request.enter.time";
+    private static final String REQUEST_EXCEPTION = "request.exception";
     private static final int LOG_MAX_STRING_LENGTH = 512;
     private static boolean mParameterNamesCacheEnabled = true;
     protected static HashMap<Method, String []> mParameterNamesMap = new HashMap<Method, String []>();
@@ -96,6 +103,7 @@ public class HttpServerHandler extends IoHandlerAdapter {
         mContentTypeMap.put(".ico", "image/x-icon");
         mContentTypeMap.put(".png", "image/png");
         mContentTypeMap.put(".bmp", "application/x-bmp");
+        mContentTypeMap.put(".pdf", "application/pdf");
         // Others
         mContentTypeMap.put(".js", "application/x-javascript");
         mContentTypeMap.put(".css", "text/css");
@@ -163,12 +171,12 @@ public class HttpServerHandler extends IoHandlerAdapter {
     }
     
     private void cacheParameterNames(Method method) {
-    	if (!mParameterNamesCacheEnabled) {
-    		return;
-    	}
-    	String cachePath = Constants.AppAssetsPath + "parameter_names.cache";
-    	String fileContent = Utils.LoadStringFromFile(cachePath);
-    	JSONObject obj = fileContent != null ? JSON.parseObject(fileContent) : new JSONObject();
+        if (!mParameterNamesCacheEnabled) {
+            return;
+        }
+        String cachePath = Constants.AppAssetsPath + "parameter_names.cache";
+        String fileContent = Utils.LoadStringFromFile(cachePath);
+        JSONObject obj = fileContent != null ? JSON.parseObject(fileContent) : new JSONObject();
         Class<?> klass = method.getDeclaringClass();
         String key = klass.getName() + "." + method.getName();
         try {
@@ -177,8 +185,8 @@ public class HttpServerHandler extends IoHandlerAdapter {
             obj.put(key, paramNames);
             Utils.SaveStringToFile(cachePath, obj.toJSONString());
         } catch (Exception e) {
-        	JSONArray array = obj.getJSONArray(key);
-        	String[] paramNames = array != null ? (String[])array.toArray(new String[array.size()]) : new String[] {};
+            JSONArray array = obj.getJSONArray(key);
+            String[] paramNames = array != null ? (String[])array.toArray(new String[array.size()]) : new String[] {};
             mParameterNamesMap.put(method, paramNames);
         }
     }
@@ -417,42 +425,47 @@ public class HttpServerHandler extends IoHandlerAdapter {
             Class<?> klass = foundRestMethod.getDeclaringClass();
             com.fenglinga.tinyspring.framework.Controller controller = (com.fenglinga.tinyspring.framework.Controller)klass.newInstance();
             Object result = null;
-            try {
-                if (tx != null) {
-                    Db.startTransaction();
-                }
-                
-                if (!containsMethod(rm.method(), request.getMethod())) {
-                    throw new Exception("Request method '" + request.getMethod() + "' not supported");
-                }
-                
-                HashMap<String, Object> allParameters = parseAllParameters(session, request);
-                List<Object> params = getMethodParameters(klass, foundRestMethod, session, request, allParameters, controller);
-                controller.setRequest(request);
-                controller.setSession(session);
-                controller.setParameters(allParameters);
+            Exception ex = (Exception) session.getAttribute(REQUEST_EXCEPTION);
+            if (ex != null) {
+                result = controller.onException(ex);
+            } else {
+                try {
+                    if (tx != null) {
+                        Db.startTransaction();
+                    }
+                    
+                    if (!containsMethod(rm.method(), request.getMethod())) {
+                        throw new Exception("Request method '" + request.getMethod() + "' not supported");
+                    }
+                    
+                    HashMap<String, Object> allParameters = parseAllParameters(session, request);
+                    List<Object> params = getMethodParameters(klass, foundRestMethod, session, request, allParameters, controller);
+                    controller.setRequest(request);
+                    controller.setSession(session);
+                    controller.setParameters(allParameters);
 
-                JSONObject reqObj = controller.onRequest(foundRestMethod, requestPath, null);
-                if (!reqObj.isEmpty()) {
-                    result = reqObj;
-                } else {
-                    result = foundRestMethod.invoke(controller, params.toArray());                    
+                    JSONObject reqObj = controller.onRequest(foundRestMethod, requestPath, null);
+                    if (!reqObj.isEmpty()) {
+                        result = reqObj;
+                    } else {
+                        result = foundRestMethod.invoke(controller, params.toArray());                    
+                    }
+                    if (tx != null) {
+                        Db.commit();
+                    }
+                    // 后处理
+                    for (int i = 0; i < mAfterReturningMethodList.size(); i++) {
+                        Method afterReturningMethod = mAfterReturningMethodList.get(i);
+                        Class<?> aspectKlass = afterReturningMethod.getDeclaringClass();
+                        Object aspect = aspectKlass.newInstance();
+                        afterReturningMethod.invoke(aspect, session, request, foundRestMethod, params.toArray(), true, result);
+                    }
+                } catch (Exception e) {
+                    if (tx != null) {
+                        Db.rollback();
+                    }
+                    result = controller.onException(e);
                 }
-                if (tx != null) {
-                    Db.commit();
-                }
-                // 后处理
-                for (int i = 0; i < mAfterReturningMethodList.size(); i++) {
-                    Method afterReturningMethod = mAfterReturningMethodList.get(i);
-                    Class<?> aspectKlass = afterReturningMethod.getDeclaringClass();
-                    Object aspect = aspectKlass.newInstance();
-                    afterReturningMethod.invoke(aspect, session, request, foundRestMethod, params.toArray(), true, result);
-                }
-            } catch (Exception e) {
-                if (tx != null) {
-                    Db.rollback();
-                }
-                result = controller.onException(e);
             }
             HttpServletResponse servletReponse = (HttpServletResponse) session.getAttribute("Response");
             if (servletReponse != null) {
@@ -828,16 +841,85 @@ public class HttpServerHandler extends IoHandlerAdapter {
         return result;
     }
     
+    private static final String regColor = "^#([a-f0-9]{6}|[a-f0-9]{3})$";
+    private static Pattern colorPattern = Pattern.compile(regColor, Pattern.CASE_INSENSITIVE);
+    private static boolean isColorValid(String str) {
+        String strLowerCase = str.toLowerCase();
+        Matcher m = colorPattern.matcher(strLowerCase);
+        if (m.find()) {
+            return true;
+        }
+        return false;
+    }
+    
     private static String reg = "(?:')|(?:--)|(?:#)|(/\\*(?:.|[\\n\\r])*?\\*/)|" + "(\\b(select|update|and|or|delete|insert|trancate|char|into|substr|ascii|declare|exec|count|master|into|drop|execute)\\b)";
     private static Pattern sqlPattern = Pattern.compile(reg, Pattern.CASE_INSENSITIVE);
     private static boolean isSQLDefendValid(String str) {
-        if (sqlPattern.matcher(str).find()) {
-            LOGGER.error("检测到潜在的攻击串:" + str);
+        String strLowerCase = str.toLowerCase();
+        Matcher m = sqlPattern.matcher(strLowerCase);
+        if (m.find()) {
+            // 特殊判断颜色
+            int pos = strLowerCase.indexOf("#");
+            if (pos >= 0) {
+                if (strLowerCase.length() >= pos + 7 && isColorValid(strLowerCase.substring(pos, pos + 7))) {
+                    return isSQLDefendValid(strLowerCase.substring(pos + 7));
+                }
+                if (strLowerCase.length() >= pos + 4 && isColorValid(strLowerCase.substring(pos, pos + 4))) {
+                    return isSQLDefendValid(strLowerCase.substring(pos + 4));
+                }
+            }
+            LOGGER.error("检测到潜在的SQL攻击串:" + m.group() + " 原串:" + str);
             return false;
         }
         return true;
     }
-
+    
+    private static String xssReg = "(?:')|(?:<)|(?:>)|" + "(\\b(javascript|script|iframe|body|input|form|onerror|alert)\\b)";
+    private static Pattern xssPattern = Pattern.compile(xssReg, Pattern.CASE_INSENSITIVE);
+    public static boolean isXSSDefendValid(String str) {
+        if (str == null || str.length() == 0) return true;
+        String strLowerCase = str.toLowerCase();
+        Matcher m = xssPattern.matcher(strLowerCase);
+        if (m.find()) {
+            LOGGER.error("检测到潜在的XSS攻击串:" + m.group() + " 原串:" + str);
+            return false;
+        }
+        return true;
+    }
+    
+    private static Set<String> supportTagSet = Utils.parseStringSet("html,head,body,br,a,p,img,span,div,ul,ol,li,h1,h2,h3,h4", ",");
+    private static boolean isTagValid(Element parent) {
+        if (!supportTagSet.contains(parent.tagName())) {
+            return false;
+        }
+        if (parent.tagName().equals("img")) {
+            String src = parent.attr("src");
+            if (!src.startsWith("data:image/")) {
+                return false;
+            }
+        }
+        for (Element e : parent.children()) {
+            if (!isTagValid(e)) {
+                return false;
+            }
+        }
+        return true;
+    }
+    
+    public static boolean isValidRichText(String str) throws Exception {
+        if (str == null || str.length() == 0) return true;
+        if (!str.contains("<") || !str.contains(">")) {
+            return true;
+        }
+        org.jsoup.nodes.Document doc = Jsoup.parse(str);
+        for (Element e : doc.children()) {
+            if (!isTagValid(e)) {
+                return false;
+            }
+        }
+        return true;
+    }
+    
     /**
      * 获取指定类指定方法的参数名
      *
@@ -893,10 +975,10 @@ public class HttpServerHandler extends IoHandlerAdapter {
     }
     
     public static String[] getMethodParameterNames(Method method) {
-    	if (!mParameterNamesCacheEnabled) {
-    		return getMethodParameterNamesByAsm(method.getDeclaringClass(), method);
-    	}
-    	return mParameterNamesMap.get(method);
+        if (!mParameterNamesCacheEnabled) {
+            return getMethodParameterNamesByAsm(method.getDeclaringClass(), method);
+        }
+        return mParameterNamesMap.get(method);
     }
     
     public List<Object> getMethodParameters(Class<?> clazz, Method method, IoSession session, HttpRequest request, HashMap<String, Object> allParameters, com.fenglinga.tinyspring.framework.Controller controller) throws Exception {
@@ -912,11 +994,13 @@ public class HttpServerHandler extends IoHandlerAdapter {
             Object pv = null;
             RequestBody rb = parameter.getAnnotation(RequestBody.class);
             KeepOriginParameter kop = parameter.getAnnotation(KeepOriginParameter.class);
+            Coding coding = parameter.getAnnotation(Coding.class);
+            RichContent richContent = parameter.getAnnotation(RichContent.class);
             if (rb != null) {
                 IoBuffer content = (IoBuffer)session.getAttribute("Content");
                 if (content != null) {
                     String postContent = new String(content.array(), content.position(), content.remaining(), "UTF-8");
-                    if (!isSQLDefendValid(postContent)) {
+                    if (!isSQLDefendValid(postContent) || !isXSSDefendValid(postContent)) {
                         throw new Exception("潜在的攻击请求");
                     }
                     if (className.equals(String.class.getName())) {
@@ -959,6 +1043,29 @@ public class HttpServerHandler extends IoHandlerAdapter {
                 } else if (className.equals(IoBuffer.class.getName())) {
                     IoBuffer content = (IoBuffer)session.getAttribute("Content");
                     pv = content;
+                } else if (className.equals(String.class.getName())) {
+                    pv = allParameters.get(paramName);
+                    if (pv != null) {
+                        if (kop != null) {
+                            pv = (String)pv;
+                            if (!isSQLDefendValid((String)pv) || !isXSSDefendValid((String)pv)) {
+                                throw new Exception("潜在的攻击请求");
+                            }
+                        } else {
+                            pv = Utils.decodeURLString((String)pv);
+                            if (coding != null) {
+                                if (coding.type() == CodingType.BASE64) {
+                                    pv = Utils.DecodeBase64((String)pv);
+                                }
+                            }
+                            if (richContent != null && !isValidRichText((String)pv)) {
+                                throw new Exception("不支持的富文本内容");
+                            }
+                            if (!isSQLDefendValid((String)pv) || (richContent == null && !isXSSDefendValid((String)pv))) {
+                                throw new Exception("潜在的攻击请求");
+                            }
+                        }
+                    }
                 } else if (className.equals(boolean.class.getName())) {
                     pv = allParameters.get(paramName);
                     if (pv == null) {
@@ -1007,21 +1114,6 @@ public class HttpServerHandler extends IoHandlerAdapter {
                         throw new Exception("必填" + className + "类型字段" + paramName + "不能为空");
                     }
                     pv = Double.valueOf(String.valueOf(pv));
-                } else if (className.equals(String.class.getName())) {
-                    pv = allParameters.get(paramName);
-                    if (pv != null) {
-                        if (kop != null) {
-                            pv = (String)pv;
-                            if (!isSQLDefendValid((String)pv)) {
-                                throw new Exception("潜在的攻击请求");
-                            }
-                        } else {
-                            pv = Utils.decodeURLString((String)pv);
-                            if (!isSQLDefendValid((String)pv)) {
-                                throw new Exception("潜在的攻击请求");
-                            }
-                        }
-                    }
                 } else if (className.equals(Byte.class.getName())) {
                     String obj = (String)allParameters.get(paramName);
                     if (obj != null && obj.length() > 0) {
@@ -1079,12 +1171,20 @@ public class HttpServerHandler extends IoHandlerAdapter {
                         for (int j = 0; j < array.length; j++) {
                             String item = array[j];
                             if (kop != null) {
-                                if (!isSQLDefendValid(item)) {
+                                if (!isSQLDefendValid(item) || !isXSSDefendValid(item)) {
                                     throw new Exception("潜在的攻击请求");
                                 }
                             } else {
                                 item = Utils.decodeURLString(item);
-                                if (!isSQLDefendValid(item)) {
+                                if (coding != null) {
+                                    if (coding.type() == CodingType.BASE64) {
+                                        pv = Utils.DecodeBase64(item);
+                                    }
+                                }
+                                if (richContent != null && !isValidRichText(item)) {
+                                    throw new Exception("不支持的富文本内容");
+                                }
+                                if (!isSQLDefendValid(item) || (richContent == null && !isXSSDefendValid(item))) {
                                     throw new Exception("潜在的攻击请求");
                                 }
                                 array[j] = item;
@@ -1152,7 +1252,7 @@ public class HttpServerHandler extends IoHandlerAdapter {
                 handleRequest(session, request);
             } else if (request.getMethod() == HttpMethod.POST) {
             } else if (request.getMethod() == HttpMethod.OPTIONS) {
-                writeResponse(session, request, "OK", "text/html;charset=utf-8", null);
+                writeResponse(session, request, "", "text/html;charset=utf-8", null);
             } else {
                 session.close(true);
             }
@@ -1166,7 +1266,23 @@ public class HttpServerHandler extends IoHandlerAdapter {
                 content.put(ioBuffer);
                 session.setAttribute("Content", content);
             } else {
-                content.put(ioBuffer);
+                Exception ex = (Exception) session.getAttribute(REQUEST_EXCEPTION);
+                if (ex == null) {
+                    String maxFileSizeStr = Constants.Config.getString("server.multipart.max_file_size");
+                    Long maxFileSize = null;
+                    if (maxFileSizeStr != null) {
+                        maxFileSize = Utils.getFileLengthFromShort(maxFileSizeStr);
+                    }
+                    if (maxFileSize != null && content.limit() + ioBuffer.limit() > maxFileSize.longValue()) {
+                        session.setAttribute(REQUEST_EXCEPTION, new Exception("content upload reach limit"));
+                    } else {
+                        try {
+                            content.put(ioBuffer);
+                        } catch (OutOfMemoryError e) {
+                            session.setAttribute(REQUEST_EXCEPTION, new Exception("content upload reach limit"));
+                        }
+                    }
+                }
             }
         } else if (message instanceof HttpEndOfContent) {
             //HttpEndOfContent endOfContent = (HttpEndOfContent) message;

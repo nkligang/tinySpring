@@ -1595,6 +1595,19 @@ public final class Utils {
         return String.format("%d Bytes", (int)length);
     }
     
+    public static long getFileLengthFromShort(String sh) {
+        if (sh.endsWith("GB")) {
+            return Long.valueOf(sh.substring(0, sh.length() - 2).trim()) * 1024 * 1024 * 1024;
+        }
+        if (sh.endsWith("MB")) {
+            return Long.valueOf(sh.substring(0, sh.length() - 2).trim()) * 1024 * 1024;
+        }
+        if (sh.endsWith("KB")) {
+            return Long.valueOf(sh.substring(0, sh.length() - 2).trim()) * 1024;
+        }
+        return Long.valueOf(sh);
+    }
+    
     public static class CommandInfo {
         public int exitValue;
         public String inputString = "";

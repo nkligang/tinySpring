@@ -116,9 +116,9 @@ public class HttpServerDecoder implements ProtocolDecoder {
                     final String contentLen = rq.getHeader("content-length");
 
                     if (contentLen != null) {
-                    	if (Integer.valueOf(contentLen) > 0) {
+                    	if (Long.valueOf(contentLen) > 0) {
                     		if (LOG_ENABLED) LOG.debug("found content len : {}", contentLen);
-                            session.setAttribute(BODY_REMAINING_BYTES, Integer.valueOf(contentLen));
+                            session.setAttribute(BODY_REMAINING_BYTES, Long.valueOf(contentLen));
                     	} else {
                     		if (LOG_ENABLED) LOG.debug("Request without content");
                             session.setAttribute(DECODER_STATE_ATT, DecoderState.NEW);
@@ -150,7 +150,7 @@ public class HttpServerDecoder implements ProtocolDecoder {
             }
             msg.position(msg.limit());
             // do we have reach end of body ?
-            int remaining = (Integer) session.getAttribute(BODY_REMAINING_BYTES);
+            long remaining = (Long) session.getAttribute(BODY_REMAINING_BYTES);
             remaining -= chunkSize;
 
             if (remaining <= 0) {
@@ -159,7 +159,7 @@ public class HttpServerDecoder implements ProtocolDecoder {
                 session.removeAttribute(BODY_REMAINING_BYTES);
                 out.write(new HttpEndOfContent());
             } else {
-                session.setAttribute(BODY_REMAINING_BYTES, Integer.valueOf(remaining));
+                session.setAttribute(BODY_REMAINING_BYTES, Long.valueOf(remaining));
             }
 
             break;

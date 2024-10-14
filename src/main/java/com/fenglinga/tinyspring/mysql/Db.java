@@ -1,9 +1,9 @@
 package com.fenglinga.tinyspring.mysql;
 
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map.Entry;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 import com.alibaba.fastjson.JSONArray;
 import com.alibaba.fastjson.JSONObject;
@@ -12,7 +12,7 @@ import com.fenglinga.tinyspring.common.Pair;
 import com.fenglinga.tinyspring.common.Utils;
 
 public class Db extends BaseObject {
-    private static HashMap<String, Pair<Long, Connection>> instance = new HashMap<String,Pair<Long, Connection>>();
+    private static ConcurrentHashMap<String, Pair<Long, Connection>> instance = new ConcurrentHashMap<String,Pair<Long, Connection>>();
     
     // 数据库初始化 并取得数据库类实例
     public static Connection connect(JSONObject config, String name) {
@@ -46,7 +46,9 @@ public class Db extends BaseObject {
                     }
                     conn.execute("SELECT 1");
                 } catch (Exception e) {
-                    e.printStackTrace();
+                	Constants.LOGGER.error(e.getMessage(), e);
+                    instance.remove(entry.getKey());
+                    hasInstanceRemoved = true;
                 }
             }
             if (!hasInstanceRemoved) {
@@ -77,12 +79,25 @@ public class Db extends BaseObject {
                     break;
                 }
             } catch (Exception e) {
-                e.printStackTrace();
+            	Constants.LOGGER.error(e.getMessage(), e);
             }
             if (!hasInstanceRemoved) {
                 break;
             }
         } while (true);
+    }
+    
+    public static void clear() {
+        for (Entry<String,Pair<Long, Connection>> entry : instance.entrySet()) {
+            try {
+            	Pair<Long, Connection> pair = entry.getValue();
+            	Connection conn = pair.second;
+            	conn.close();
+                instance.remove(entry.getKey());
+            } catch (Exception e) {
+            	Constants.LOGGER.error(e.getMessage(), e);
+            }
+        }
     }
 
     public static JSONObject parseConfig(JSONObject config) {

@@ -148,13 +148,21 @@ public class SpringAppBuilder {
             mExecutor.scheduleAtFixedRate(new Runnable() {
                 @Override
                 public void run() {
-                    Db.ping();
+                	try {
+                		Db.ping();
+                	} catch (Exception e) {
+                		Constants.LOGGER.error(e.getMessage(), e);
+                	}
                 }
-            }, 30 * 60, 30 * 60, TimeUnit.SECONDS);
+            }, 30, 30, TimeUnit.SECONDS);
             mExecutor.scheduleAtFixedRate(new Runnable() {
                 @Override
                 public void run() {
-                    Db.recycle();
+                	try {
+                		Db.recycle();
+                	} catch (Exception e) {
+                		Constants.LOGGER.error(e.getMessage(), e);
+                	}
                 }
             }, 15, 15, TimeUnit.SECONDS);
 
@@ -179,6 +187,7 @@ public class SpringAppBuilder {
                     }
                     if (currentTimeMillis > debugSessionStartTime + debugSessionDelayTime) {
                         debugSessionStartTime = currentTimeMillis;
+                        Constants.LOGGER.debug("Executor queue:" + mExecutor.getQueue().size());
                     }
                     if (currentTimeMillis > gcStartTime + gcDelayTime) {
                         gcStartTime = currentTimeMillis;
@@ -195,10 +204,6 @@ public class SpringAppBuilder {
                 }
             }
             
-            if (mDeInitializer != null) {
-            	mDeInitializer.run();
-            }
-            
             if (websocketPort != null) {
                 mWebsocketAcceptor.unbind();
                 mWebsocketAcceptor.dispose();
@@ -212,6 +217,10 @@ public class SpringAppBuilder {
             mHandler.onApplicationShutdown();
             
             mExecutor.shutdown();
+            
+            if (mDeInitializer != null) {
+            	mDeInitializer.run();
+            }
         } catch (Exception ex) {
             ex.printStackTrace();
         }

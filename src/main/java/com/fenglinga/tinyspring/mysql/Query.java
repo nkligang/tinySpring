@@ -41,10 +41,10 @@ public class Query extends BaseObject {
     }
     
     public Query field(Object field) throws Exception {
-        return field(field, false, "", "", "");
+        return field(field, false, "", "", "", false);
     }
     
-    public Query field(Object field, boolean except, String tableName, String prefix, String alias) throws Exception {
+    public Query field(Object field, boolean except, String tableName, String prefix, String alias, boolean isSet) throws Exception {
         if (empty(field)) {
             return this;
         }
@@ -89,7 +89,7 @@ public class Query extends BaseObject {
                 fieldResult.set(i, val);
             }
         }
-        if (this.options.containsKey("field")) {
+        if (this.options.containsKey("field") && !isSet) {
             fieldResult = array_merge(this.options.getJSONArray("field"), fieldResult);
         }
         this.options.put("field", array_unique(fieldResult));
@@ -1002,12 +1002,12 @@ public class Query extends BaseObject {
     }
 
     // 字段值增长
-    public int setInc(String field, int step) throws Exception {
+    public int setInc(String field, Object step) throws Exception {
         return this.setField(field, array(new String[] { "exp", field + "+" + step }));
     }
 
     // 字段值减少
-    public int setDec(String field, int step) throws Exception {
+    public int setDec(String field, Object step) throws Exception {
         return this.setField(field, array(new String[] { "exp", field + "-" + step }));
     }
     
@@ -1031,7 +1031,7 @@ public class Query extends BaseObject {
     }
     
     // 字段值增加
-    public Query inc(Object field, int step) {
+    public Query inc(Object field, Object step) {
         JSONArray fields = is_string(field) ? explode(",", (String)field) : (JSONArray)field;
         for (int i = 0; i < fields.size(); i++) {
             String key = fields.getString(i);
@@ -1041,7 +1041,7 @@ public class Query extends BaseObject {
     }
     
     // 字段值减少
-    public Query dec(Object field, int step) {
+    public Query dec(Object field, Object step) {
         JSONArray fields = is_string(field) ? explode(",", (String)field) : (JSONArray)field;
         for (int i = 0; i < fields.size(); i++) {
             String key = fields.getString(i);

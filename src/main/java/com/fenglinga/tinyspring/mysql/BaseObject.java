@@ -516,11 +516,11 @@ public class BaseObject {
         return UUID.randomUUID().toString();
     }
     
-    public static int strtotime(String str) {
+    public static long strtotime(String str) {
         if (str.length() == 10) {
-            return (int)Utils.getTime(str, "yyyy-MM-dd");
+            return (long)Utils.getTime(str, "yyyy-MM-dd");
         } else {
-            return (int)Utils.getTime(str, "yyyy-MM-dd HH:mm:ss");
+            return (long)Utils.getTime(str, "yyyy-MM-dd HH:mm:ss");
         }
     }
     

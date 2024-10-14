@@ -88,7 +88,9 @@ public class Connection extends BaseObject {
                 throw ex;
             }
         }
-        Constants.LOGGER.info(mConnection.toString() + ":OPEN");
+        if (this.config.getBooleanValue("show-sql")) {
+        	Constants.LOGGER.info(mConnection.toString() + ":OPEN");
+        }
     }
     
     public JSONArray query(String sql) throws Exception {
@@ -217,8 +219,11 @@ public class Connection extends BaseObject {
         if (this.mConnection == null) {
             return;
         }
-        Constants.LOGGER.info(mConnection.toString() + ":CLOSE");
+        if (this.config.getBooleanValue("show-sql")) {
+        	Constants.LOGGER.info(mConnection.toString() + ":CLOSE");
+        }
         this.mConnection.close();
+        this.mConnection = null;
     }
     
     public String parseDsn(JSONObject config) {
@@ -231,7 +236,7 @@ public class Connection extends BaseObject {
         if (!empty(config.getString("charset"))) {
             dsn.append("&useUnicode=true").append("&characterEncoding=").append(config.getString("charset"));
         }
-        dsn.append("&useOldAliasMetadataBehavior=true");
+        dsn.append("&useOldAliasMetadataBehavior=true&autoReconnect=true");
         return dsn.toString();
     }
     
